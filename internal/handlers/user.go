@@ -35,8 +35,8 @@ type RegisterRequest struct {
 	Password string `json:"password"`
 }
 
-// Test для проверки авторизации
-func (h *UserHandler) Test(w http.ResponseWriter, r *http.Request) {
+// Status для проверки авторизации
+func (h *UserHandler) Status(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	msg := "anonymous"
 	if ok {

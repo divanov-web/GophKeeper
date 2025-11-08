@@ -31,7 +31,7 @@ func NewHandler(
 	// User routes
 	r.Post("/api/user/register", userHandler.Register)
 	r.Post("/api/user/login", userHandler.Login)
-	r.Post("/api/user/test", userHandler.Test)
+	r.Post("/api/user/test", userHandler.Status)
 
 	return &Handler{Router: r}
 }
