@@ -1,12 +1,11 @@
 package repository
 
 import (
+	"GophKeeper/internal/model"
 	"fmt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-
-	"github.com/divanov-web/gophermart/internal/model"
 )
 
 // InitDB подключается к БД, выполняет миграции и возвращает *gorm.DB
@@ -18,7 +17,7 @@ func InitDB(dsn string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("gorm open: %w", err)
 	}
 
-	if err := db.AutoMigrate(&model.User{}, &model.Order{}, &model.Withdrawal{}); err != nil {
+	if err := db.AutoMigrate(&model.User{}); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}
 
