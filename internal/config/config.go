@@ -50,7 +50,7 @@ func NewConfig() *Config {
 	if cfg.AuthSecret == "" {
 		cfg.AuthSecret = "dev-secret-key"
 	}
-	// validate BaseURL: must be in "address:port" (no scheme, no path). Otherwise use default.
+	// validate BaseURL: must be in "address:port" (no scheme, no path). Otherwise, use default.
 	hostPortRe := regexp.MustCompile(`^[A-Za-z0-9\.\-]+:\d{1,5}$`)
 	if !hostPortRe.MatchString(cfg.BaseURL) {
 		cfg.BaseURL = "localhost:8081"
