@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"GophKeeper/internal/cli/commands"
+	"GophKeeper/internal/config"
 )
 
 var (
@@ -15,16 +16,15 @@ var (
 )
 
 func main() {
-	// Global flags
-	baseURL := flag.String("base-url", "http://localhost:8081", "Base URL of the GophKeeper server")
-	showVersion := flag.Bool("version", false, "Show client version and exit")
-	flag.Parse()
+	// Load unified config (env + flags)
+	cfg := config.NewConfig()
 
-	if *showVersion {
+	if cfg.Version {
 		printVersion()
 		return
 	}
 
+	// Flags already parsed inside NewConfig()
 	args := flag.Args()
 	if len(args) == 0 {
 		printUsage()
@@ -40,7 +40,7 @@ func main() {
 		}
 		login := args[1]
 		password := args[2]
-		if err := commands.Register(*baseURL, login, password); err != nil {
+		if err := commands.Register(cfg.ServerURL, login, password); err != nil {
 			fmt.Println("Register error:", err)
 			os.Exit(1)
 		}
@@ -53,14 +53,14 @@ func main() {
 		}
 		login := args[1]
 		password := args[2]
-		if err := commands.Login(*baseURL, login, password); err != nil {
+		if err := commands.Login(cfg.ServerURL, login, password); err != nil {
 			fmt.Println("Login error:", err)
 			os.Exit(1)
 		}
 		fmt.Println("Logged in successfully")
 
 	case "status":
-		if err := commands.Status(*baseURL); err != nil {
+		if err := commands.Status(cfg.ServerURL); err != nil {
 			fmt.Println("Status error:", err)
 			os.Exit(1)
 		}

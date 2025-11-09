@@ -49,17 +49,20 @@ func main() {
 
 	h := handlers.NewHandler(userService, sugar, cfg)
 
+	addr := cfg.BaseURL
+
 	sugar.Infow(
 		"Starting server",
-		"addr", cfg.ServerAddress,
+		"addr", addr,
 	)
 
 	sugar.Infow("Config",
-		"ServerAddress", cfg.ServerAddress,
+		"BaseURL", cfg.BaseURL,
+		"EnableHTTPS", cfg.EnableHTTPS,
 		"DatabaseDSN", cfg.DatabaseDSN,
 	)
 
-	if err := http.ListenAndServe(cfg.ServerAddress, h.Router); err != nil {
+	if err := http.ListenAndServe(addr, h.Router); err != nil {
 		sugar.Fatalw("Server failed", "error", err)
 	}
 }
