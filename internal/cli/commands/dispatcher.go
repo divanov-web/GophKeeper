@@ -19,7 +19,6 @@ func Dispatch(cfg *config.Config, args []string) int {
 		}
 	}
 
-	// If flags not parsed by caller, make sure they are parsed
 	if !flag.Parsed() {
 		flag.Parse()
 	}

@@ -23,7 +23,7 @@ func main() {
 		return
 	}
 
-	// Flags already parsed inside NewConfig(); delegate to dispatcher
+	// dispatcher
 	exitCode := commands.Dispatch(cfg, flag.Args())
 	if exitCode == 0 {
 		return
