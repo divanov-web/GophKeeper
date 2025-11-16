@@ -65,7 +65,17 @@ CREATE TABLE IF NOT EXISTS items (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   version INTEGER NOT NULL,
-  deleted INTEGER NOT NULL DEFAULT 0
+  deleted INTEGER NOT NULL DEFAULT 0,
+  file_name TEXT,
+  blob_id TEXT,
+  login_cipher BLOB,
+  login_nonce BLOB,
+  password_cipher BLOB,
+  password_nonce BLOB,
+  text_cipher BLOB,
+  text_nonce BLOB,
+  card_cipher BLOB,
+  card_nonce BLOB
 );
 CREATE INDEX IF NOT EXISTS idx_items_deleted_updated_at ON items(deleted, updated_at);
 CREATE INDEX IF NOT EXISTS idx_items_name ON items(name);
@@ -87,15 +97,36 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// AddItem добавляет запись и возвращает её ID.
-func (r *ItemRepositorySQLite) AddItem(name string) (string, error) {
+// Add добавляет запись и, при наличии, сохраняет логин/пароль.
+// Логин/пароль сохраняются как байты в полях login_cipher/password_cipher, nonce пока не используется (NULL).
+func (r *ItemRepositorySQLite) Add(name string, login, password *string) (string, error) {
 	if err := ValidateName(name); err != nil {
 		return "", err
 	}
 	id := uuid.NewString()
 	now := time.Now().Unix()
-	_, err := r.db.Exec(`INSERT INTO items(id, name, created_at, updated_at, version, deleted) VALUES(?, ?, ?, ?, ?, 0)`,
-		id, name, now, now, 1,
+	var loginBytes, passBytes []byte
+	if login != nil {
+		loginBytes = []byte(*login)
+	}
+	if password != nil {
+		passBytes = []byte(*password)
+	}
+	// Если ни логина, ни пароля нет — вставляем без дополнительных полей
+	if login == nil && password == nil {
+		_, err := r.db.Exec(`INSERT INTO items(id, name, created_at, updated_at, version, deleted) VALUES(?, ?, ?, ?, ?, 0)`,
+			id, name, now, now, 1,
+		)
+		if err != nil {
+			return "", err
+		}
+		return id, nil
+	}
+	_, err := r.db.Exec(`INSERT INTO items(
+        id, name, created_at, updated_at, version, deleted,
+        login_cipher, login_nonce, password_cipher, password_nonce
+    ) VALUES(?, ?, ?, ?, ?, 0, ?, NULL, ?, NULL)`,
+		id, name, now, now, 1, loginBytes, passBytes,
 	)
 	if err != nil {
 		return "", err
@@ -130,8 +161,11 @@ func (r *ItemRepositorySQLite) GetItemByName(name string) (*model.Item, error) {
 	}
 	var it model.Item
 	var delInt int
-	err := r.db.QueryRow(`SELECT id, name, created_at, updated_at, version, deleted FROM items WHERE name = ?`, name).
-		Scan(&it.ID, &it.Name, &it.CreatedAt, &it.UpdatedAt, &it.Version, &delInt)
+	err := r.db.QueryRow(`SELECT id, name, created_at, updated_at, version, deleted,
+     login_cipher, login_nonce, password_cipher, password_nonce
+   FROM items WHERE name = ?`, name).
+		Scan(&it.ID, &it.Name, &it.CreatedAt, &it.UpdatedAt, &it.Version, &delInt,
+			&it.LoginCipher, &it.LoginNonce, &it.PasswordCipher, &it.PasswordNonce)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("item with name %q not found", name)

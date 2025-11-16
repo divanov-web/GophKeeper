@@ -4,8 +4,9 @@ import "GophKeeper/internal/cli/model"
 
 // ItemRepository определяет порт доступа к локальному хранилищу элементов.
 type ItemRepository interface {
-	// AddItem добавляет запись и возвращает её ID.
-	AddItem(name string) (string, error)
+	// Add добавляет запись и, при наличии, сразу сохраняет логин/пароль (могут быть nil).
+	// Возвращает ID созданной записи.
+	Add(name string, login, password *string) (string, error)
 
 	// ListItems возвращает все записи
 	ListItems() ([]model.Item, error)

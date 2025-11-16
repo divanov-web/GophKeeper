@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// AuthFSStore — файловое хранилище токена и контекста пользователя для CLI.
+// AuthFSStore - файловое хранилище токена и контекста пользователя для CLI.
 type AuthFSStore struct{}
 
 func configDir() (string, error) {

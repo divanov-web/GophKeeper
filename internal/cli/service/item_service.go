@@ -7,8 +7,8 @@ import (
 
 // ItemService описывает юзкейс-уровень работы с локальными записями (items) для CLI.
 type ItemService interface {
-	// Add создаёт новую запись с указанным именем и возвращает её ID.
-	Add(name string) (string, error)
+	// Add создаёт новую запись и, при наличии, сразу сохраняет логин/пароль (могут быть nil). Возвращает ID.
+	Add(name string, login, password *string) (string, error)
 
 	// List возвращает список всех записей текущего пользователя.
 	List() ([]model.Item, error)
@@ -17,7 +17,7 @@ type ItemService interface {
 	GetByName(name string) (*model.Item, error)
 }
 
-// ItemServiceLocal — локальная реализация ItemService поверх переданного репозитория.
+// ItemServiceLocal - локальная реализация ItemService.
 type ItemServiceLocal struct {
 	repo repo.ItemRepository
 }
@@ -27,9 +27,9 @@ func NewItemServiceLocal(r repo.ItemRepository) ItemService {
 	return &ItemServiceLocal{repo: r}
 }
 
-// Add item to DB.
-func (s ItemServiceLocal) Add(name string) (string, error) {
-	return s.repo.AddItem(name)
+// Add item.
+func (s ItemServiceLocal) Add(name string, login, password *string) (string, error) {
+	return s.repo.Add(name, login, password)
 }
 
 // List items.

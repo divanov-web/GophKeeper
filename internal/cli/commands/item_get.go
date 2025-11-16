@@ -41,6 +41,17 @@ func (itemGetCmd) Run(cfg *config.Config, args []string) error {
 	} else {
 		fmt.Println("deleted:   false")
 	}
+	// Печатаем логин/пароль, если сохранены (пока без расшифровки)
+	if len(it.LoginCipher) > 0 {
+		fmt.Printf("login:     %s\n", string(it.LoginCipher))
+	} else {
+		fmt.Println("login:     <not set>")
+	}
+	if len(it.PasswordCipher) > 0 {
+		fmt.Printf("password:  %s\n", string(it.PasswordCipher))
+	} else {
+		fmt.Println("password:  <not set>")
+	}
 	return nil
 }
 
