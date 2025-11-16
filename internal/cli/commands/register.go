@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"GophKeeper/internal/cli/api"
+	"GophKeeper/internal/cli/auth"
+	"GophKeeper/internal/cli/store"
 )
 
 type RegisterRequest struct {
@@ -38,6 +40,19 @@ func (registerCmd) Run(cfg *config.Config, args []string) error {
 	if resp.StatusCode == http.StatusOK {
 		if err := api.PersistAuthFromResponse(resp); err != nil {
 			return fmt.Errorf("saving auth: %w", err)
+		}
+		// remember last successful login
+		if err := auth.SaveLastLogin(login); err != nil {
+			return fmt.Errorf("save last login: %w", err)
+		}
+		// prepare per-user DB and run migrations
+		st, _, err := store.OpenForUser(login)
+		if err != nil {
+			return fmt.Errorf("open user db: %w", err)
+		}
+		defer st.Close()
+		if err := st.Migrate(); err != nil {
+			return fmt.Errorf("migrate user db: %w", err)
 		}
 		fmt.Println("Registered successfully")
 		return nil
