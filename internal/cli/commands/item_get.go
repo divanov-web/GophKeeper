@@ -1,41 +1,26 @@
 package commands
 
 import (
-	"GophKeeper/internal/cli/auth"
-	"GophKeeper/internal/cli/store"
+	"GophKeeper/internal/cli/service"
 	"GophKeeper/internal/config"
 	"fmt"
 )
 
 type itemGetCmd struct{}
 
-func (itemGetCmd) Name() string { return "item" }
+func (itemGetCmd) Name() string { return "item-get" }
 func (itemGetCmd) Description() string {
 	return "Показать запись по имени (точное совпадение)"
 }
-func (itemGetCmd) Usage() string { return "item <name>" }
+func (itemGetCmd) Usage() string { return "item-get <name>" }
 
 func (itemGetCmd) Run(cfg *config.Config, args []string) error {
 	if len(args) != 1 {
 		return ErrUsage
 	}
 	name := args[0]
-	if err := store.ValidateName(name); err != nil {
-		return err
-	}
-	login, err := auth.LoadLastLogin()
-	if err != nil {
-		return fmt.Errorf("нет активного пользователя: выполните login/register: %w", err)
-	}
-	st, _, err := store.OpenForUser(login)
-	if err != nil {
-		return fmt.Errorf("open user db: %w", err)
-	}
-	defer st.Close()
-	if err := st.Migrate(); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	}
-	it, err := st.GetItemByName(name)
+	svc := service.ItemServiceLocal{}
+	it, err := svc.GetByName(name)
 	if err != nil {
 		return err
 	}

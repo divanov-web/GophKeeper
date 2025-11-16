@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"GophKeeper/internal/cli/api"
-	"GophKeeper/internal/cli/auth"
+	fsrepo "GophKeeper/internal/cli/repo/fs"
 )
 
 type dataResponse struct {
@@ -27,7 +27,7 @@ func (statusCmd) Run(cfg *config.Config, args []string) error {
 	}
 	baseURL := cfg.ServerURL
 	endpoint := strings.TrimRight(baseURL, "/") + "/api/user/test"
-	token, _ := auth.LoadToken()
+	token, _ := (fsrepo.AuthFSStore{}).Load()
 	resp, body, err := api.PostJSON(endpoint, struct{}{}, token)
 	if err != nil {
 		return err

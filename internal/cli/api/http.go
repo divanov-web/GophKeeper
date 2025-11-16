@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"GophKeeper/internal/cli/auth"
+	fsrepo "GophKeeper/internal/cli/repo/fs"
 )
 
 // PostJSON sends a JSON POST request. If token is non-empty, it is passed as auth cookie.
@@ -32,11 +32,12 @@ func PostJSON(url string, payload any, token string) (*http.Response, []byte, er
 	return resp, body, nil
 }
 
-// PersistAuthFromResponse extracts auth cookie from response and saves it using auth package.
+// PersistAuthFromResponse извлекает auth cookie из ответа и сохраняет его через файловое хранилище.
 func PersistAuthFromResponse(resp *http.Response) error {
+	store := fsrepo.AuthFSStore{}
 	for _, c := range resp.Cookies() {
 		if c.Name == "auth_token" && c.Value != "" {
-			return auth.SaveToken(c.Value)
+			return store.Save(c.Value)
 		}
 	}
 	return fmt.Errorf("no auth cookie in response")

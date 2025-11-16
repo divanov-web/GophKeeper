@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"GophKeeper/internal/cli/api"
-	"GophKeeper/internal/cli/auth"
-	"GophKeeper/internal/cli/store"
+	fsrepo "GophKeeper/internal/cli/repo/fs"
+	reposqlite "GophKeeper/internal/cli/repo/sqlite"
 )
 
 type LoginRequest struct {
@@ -42,11 +42,11 @@ func (loginCmd) Run(cfg *config.Config, args []string) error {
 			return fmt.Errorf("saving auth: %w", err)
 		}
 		// remember last successful login
-		if err := auth.SaveLastLogin(login); err != nil {
+		if err := (fsrepo.AuthFSStore{}).SaveLogin(login); err != nil {
 			return fmt.Errorf("save last login: %w", err)
 		}
 		// prepare per-user DB and run migrations
-		st, _, err := store.OpenForUser(login)
+		st, _, err := reposqlite.OpenForUser(login)
 		if err != nil {
 			return fmt.Errorf("open user db: %w", err)
 		}

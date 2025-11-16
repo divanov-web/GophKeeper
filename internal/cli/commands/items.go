@@ -1,8 +1,7 @@
 package commands
 
 import (
-	"GophKeeper/internal/cli/auth"
-	"GophKeeper/internal/cli/store"
+	"GophKeeper/internal/cli/service"
 	"GophKeeper/internal/config"
 	"fmt"
 )
@@ -11,7 +10,7 @@ type itemsCmd struct{}
 
 func (itemsCmd) Name() string { return "items" }
 func (itemsCmd) Description() string {
-	return "Показать все записи текущего пользователя"
+	return "Показать все записи"
 }
 func (itemsCmd) Usage() string { return "items" }
 
@@ -19,19 +18,8 @@ func (itemsCmd) Run(cfg *config.Config, args []string) error {
 	if len(args) != 0 {
 		return ErrUsage
 	}
-	login, err := auth.LoadLastLogin()
-	if err != nil {
-		return fmt.Errorf("нет активного пользователя: выполните login/register: %w", err)
-	}
-	st, _, err := store.OpenForUser(login)
-	if err != nil {
-		return fmt.Errorf("open user db: %w", err)
-	}
-	defer st.Close()
-	if err := st.Migrate(); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	}
-	list, err := st.ListItems()
+	svc := service.ItemServiceLocal{}
+	list, err := svc.List()
 	if err != nil {
 		return err
 	}
