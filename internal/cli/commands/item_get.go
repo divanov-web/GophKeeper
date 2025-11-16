@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"fmt"
+
+	"GophKeeper/internal/cli/bootstrap"
 	"GophKeeper/internal/cli/service"
 	"GophKeeper/internal/config"
-	"fmt"
 )
 
 type itemGetCmd struct{}
@@ -19,7 +21,12 @@ func (itemGetCmd) Run(cfg *config.Config, args []string) error {
 		return ErrUsage
 	}
 	name := args[0]
-	svc := service.ItemServiceLocal{}
+	r, done, err := bootstrap.OpenItemRepo()
+	if err != nil {
+		return err
+	}
+	defer done()
+	svc := service.NewItemServiceLocal(r)
 	it, err := svc.GetByName(name)
 	if err != nil {
 		return err
