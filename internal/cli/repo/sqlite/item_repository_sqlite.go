@@ -17,7 +17,8 @@ import (
 
 // ItemRepositorySQLite repo for items.
 type ItemRepositorySQLite struct {
-	db *sql.DB
+	db    *sql.DB
+	login string
 }
 
 var _ repo.ItemRepository = (*ItemRepositorySQLite)(nil)
@@ -45,7 +46,7 @@ func OpenForUser(login string) (*ItemRepositorySQLite, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	return &ItemRepositorySQLite{db: db}, dbPath, nil
+	return &ItemRepositorySQLite{db: db, login: login}, dbPath, nil
 }
 
 // Close закрывает соединение с БД.
@@ -97,36 +98,18 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// Add добавляет запись и, при наличии, сохраняет логин/пароль.
-// Логин/пароль сохраняются как байты в полях login_cipher/password_cipher, nonce пока не используется (NULL).
-func (r *ItemRepositorySQLite) Add(name string, login, password *string) (string, error) {
+// AddEncrypted добавляет запись, принимая уже зашифрованные значения (или nil).
+func (r *ItemRepositorySQLite) AddEncrypted(name string, loginCipher, loginNonce, passCipher, passNonce []byte) (string, error) {
 	if err := ValidateName(name); err != nil {
 		return "", err
 	}
 	id := uuid.NewString()
 	now := time.Now().Unix()
-	var loginBytes, passBytes []byte
-	if login != nil {
-		loginBytes = []byte(*login)
-	}
-	if password != nil {
-		passBytes = []byte(*password)
-	}
-	// Если ни логина, ни пароля нет — вставляем без дополнительных полей
-	if login == nil && password == nil {
-		_, err := r.db.Exec(`INSERT INTO items(id, name, created_at, updated_at, version, deleted) VALUES(?, ?, ?, ?, ?, 0)`,
-			id, name, now, now, 1,
-		)
-		if err != nil {
-			return "", err
-		}
-		return id, nil
-	}
 	_, err := r.db.Exec(`INSERT INTO items(
         id, name, created_at, updated_at, version, deleted,
         login_cipher, login_nonce, password_cipher, password_nonce
-    ) VALUES(?, ?, ?, ?, ?, 0, ?, NULL, ?, NULL)`,
-		id, name, now, now, 1, loginBytes, passBytes,
+    ) VALUES(?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+		id, name, now, now, 1, loginCipher, loginNonce, passCipher, passNonce,
 	)
 	if err != nil {
 		return "", err
