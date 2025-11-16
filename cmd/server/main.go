@@ -4,7 +4,7 @@ import (
 	"GophKeeper/internal/config"
 	"GophKeeper/internal/handlers"
 	"GophKeeper/internal/middleware"
-	"GophKeeper/internal/repository"
+	"GophKeeper/internal/repo"
 	"GophKeeper/internal/service"
 	"context"
 	"fmt"
@@ -37,12 +37,12 @@ func main() {
 	defer cancel()
 	_ = ctx
 
-	gormDB, err := repository.InitDB(cfg.DatabaseDSN)
+	gormDB, err := repo.InitDB(cfg.DatabaseDSN)
 	if err != nil {
 		sugar.Fatalw("failed to initialize database", "error", err)
 	}
 
-	userRepo := repository.NewUserRepository(gormDB)
+	userRepo := repo.NewUserRepository(gormDB)
 	userService := service.NewUserService(userRepo)
 
 	fmt.Println(userService.TestData())

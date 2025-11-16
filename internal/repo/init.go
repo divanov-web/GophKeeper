@@ -1,8 +1,9 @@
-package repository
+package repo
 
 import (
 	"GophKeeper/internal/model"
 	"fmt"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

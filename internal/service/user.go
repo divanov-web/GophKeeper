@@ -2,7 +2,7 @@ package service
 
 import (
 	"GophKeeper/internal/model"
-	"GophKeeper/internal/repository"
+	"GophKeeper/internal/repo"
 	"context"
 	"errors"
 
@@ -10,12 +10,12 @@ import (
 )
 
 type UserService struct {
-	repo repository.UserRepository
+	repo repo.UserRepository
 }
 
 var ErrLoginTaken = errors.New("login already in use")
 
-func NewUserService(repo repository.UserRepository) *UserService {
+func NewUserService(repo repo.UserRepository) *UserService {
 	return &UserService{repo: repo}
 }
 
