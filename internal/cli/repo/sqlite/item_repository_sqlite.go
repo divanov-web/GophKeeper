@@ -145,7 +145,7 @@ func (r *ItemRepositorySQLite) GetItemByName(name string) (*model.Item, error) {
 	var it model.Item
 	var delInt int
 	err := r.db.QueryRow(`SELECT id, name, created_at, updated_at, version, deleted,
-     file_name, blob_id,
+     IFNULL(file_name, ''), IFNULL(blob_id, ''),
      login_cipher, login_nonce, password_cipher, password_nonce,
      text_cipher, text_nonce, card_cipher, card_nonce
    FROM items WHERE name = ?`, name).

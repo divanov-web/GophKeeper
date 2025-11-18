@@ -12,4 +12,7 @@ type DecryptedItem struct {
 	// Отображаемые поля
 	Login    string
 	Password string
+	Text     string // расшифрованный произвольный текст
+	Card     string // расшифрованные данные карты (как JSON-строка)
+	FileName string // имя прикреплённого файла
 }

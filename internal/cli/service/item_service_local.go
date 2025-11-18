@@ -70,8 +70,12 @@ func (s ItemServiceLocal) GetByName(name string) (*view.DecryptedItem, error) {
 		Version:   it.Version,
 		Deleted:   it.Deleted,
 	}
+	// Определяем, что необходимо расшифровать
 	needLogin := len(it.LoginCipher) > 0 && len(it.LoginNonce) > 0
 	needPass := len(it.PasswordCipher) > 0 && len(it.PasswordNonce) > 0
+	needText := len(it.TextCipher) > 0 && len(it.TextNonce) > 0
+	needCard := len(it.CardCipher) > 0 && len(it.CardNonce) > 0
+
 	// Значения по умолчанию, если поле отсутствует
 	if !needLogin {
 		dto.Login = "<not set>"
@@ -79,7 +83,20 @@ func (s ItemServiceLocal) GetByName(name string) (*view.DecryptedItem, error) {
 	if !needPass {
 		dto.Password = "<not set>"
 	}
-	if !(needLogin || needPass) {
+	if !needText {
+		dto.Text = "<not set>"
+	}
+	if !needCard {
+		dto.Card = "<not set>"
+	}
+	if it.FileName == "" {
+		dto.FileName = "<not set>"
+	} else {
+		dto.FileName = it.FileName
+	}
+
+	// Если нечего расшифровывать — возвращаем уже подготовленный DTO
+	if !(needLogin || needPass || needText || needCard) {
 		return dto, nil
 	}
 	loginName, _ := (fsrepo.AuthFSStore{}).LoadLogin()
@@ -90,6 +107,12 @@ func (s ItemServiceLocal) GetByName(name string) (*view.DecryptedItem, error) {
 		}
 		if needPass {
 			dto.Password = "<decrypt error>"
+		}
+		if needText {
+			dto.Text = "<decrypt error>"
+		}
+		if needCard {
+			dto.Card = "<decrypt error>"
 		}
 		return dto, nil
 	}
@@ -105,6 +128,21 @@ func (s ItemServiceLocal) GetByName(name string) (*view.DecryptedItem, error) {
 			dto.Password = "<decrypt error>"
 		} else {
 			dto.Password = string(plain)
+		}
+	}
+	if needText {
+		if plain, err := crypto.Decrypt(it.TextCipher, it.TextNonce, key); err != nil {
+			dto.Text = "<decrypt error>"
+		} else {
+			dto.Text = string(plain)
+		}
+	}
+	if needCard {
+		if plain, err := crypto.Decrypt(it.CardCipher, it.CardNonce, key); err != nil {
+			dto.Card = "<decrypt error>"
+		} else {
+			// Хранимое значение — JSON; выводим как есть
+			dto.Card = string(plain)
 		}
 	}
 	return dto, nil
@@ -175,8 +213,7 @@ func (s ItemServiceLocal) Edit(name, fieldType string, value []string) (string, 
 			return "", false, err
 		}
 		fileName := filepath.Base(path)
-		// blobID генерируется на уровне репозитория (SQLite реализация знает login и удобнее пишет файл),
-		// но для унификации оставим генерацию там. Здесь просто передаём содержимое и имя файла.
+		// передаём содержимое и имя файла.
 		return s.repo.UpsertFile(name, fileName, "", c)
 	default:
 		return "", false, fmt.Errorf("неизвестный тип: %s (ожидается: login|password|text|card|file)", fieldType)

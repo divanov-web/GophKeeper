@@ -36,13 +36,12 @@ func (itemGetCmd) Run(cfg *config.Config, args []string) error {
 	fmt.Printf("created:   %d\n", it.CreatedAt)
 	fmt.Printf("updated:   %d\n", it.UpdatedAt)
 	fmt.Printf("version:   %d\n", it.Version)
-	if it.Deleted {
-		fmt.Println("deleted:   true")
-	} else {
-		fmt.Println("deleted:   false")
-	}
+	fmt.Printf("deleted:   %t\n", it.Deleted)
 	fmt.Printf("login:     %s\n", it.Login)
 	fmt.Printf("password:  %s\n", it.Password)
+	fmt.Printf("text:      %s\n", it.Text)
+	fmt.Printf("card:      %s\n", it.Card)
+	fmt.Printf("file:      %s\n", it.FileName)
 	return nil
 }
 
