@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// AuthFSStore - файловое хранилище токена и контекста пользователя для CLI.
+// AuthFSStore — файловое хранилище токена и контекста пользователя для CLI.
 type AuthFSStore struct{}
 
 func configDir() (string, error) {
@@ -37,7 +37,7 @@ func lastLoginPath() (string, error) {
 	return filepath.Join(dir, "last_login"), nil
 }
 
-// Save token to file.
+// Save сохраняет auth‑токен в файл.
 func (AuthFSStore) Save(token string) error {
 	p, err := tokenPath()
 	if err != nil {
@@ -46,7 +46,7 @@ func (AuthFSStore) Save(token string) error {
 	return os.WriteFile(p, []byte(token), 0o600)
 }
 
-// Load token from a file.
+// Load читает auth‑токен из файла.
 func (AuthFSStore) Load() (string, error) {
 	p, err := tokenPath()
 	if err != nil {
@@ -59,7 +59,7 @@ func (AuthFSStore) Load() (string, error) {
 	if len(b) == 0 {
 		return "", errors.New("empty token file")
 	}
-	// trim trailing newline/space
+	// обрезаем завершающие переводы строки/пробелы
 	for len(b) > 0 {
 		c := b[len(b)-1]
 		if c == '\n' || c == '\r' || c == ' ' || c == '\t' {
@@ -71,7 +71,7 @@ func (AuthFSStore) Load() (string, error) {
 	return string(b), nil
 }
 
-// SaveLogin to a file.
+// SaveLogin сохраняет логин пользователя в файл.
 func (AuthFSStore) SaveLogin(login string) error {
 	if login == "" {
 		return errors.New("empty login")
@@ -83,7 +83,7 @@ func (AuthFSStore) SaveLogin(login string) error {
 	return os.WriteFile(p, []byte(login), 0o600)
 }
 
-// LoadLogin from a file.
+// LoadLogin читает логин пользователя из файла.
 func (AuthFSStore) LoadLogin() (string, error) {
 	p, err := lastLoginPath()
 	if err != nil {
@@ -96,7 +96,7 @@ func (AuthFSStore) LoadLogin() (string, error) {
 	if len(b) == 0 {
 		return "", errors.New("no stored login")
 	}
-	// trim trailing newline/space
+	// обрезаем завершающие переводы строки/пробелы
 	for len(b) > 0 {
 		c := b[len(b)-1]
 		if c == '\n' || c == '\r' || c == ' ' || c == '\t' {

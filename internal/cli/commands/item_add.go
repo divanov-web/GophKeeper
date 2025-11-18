@@ -34,12 +34,12 @@ func (itemAddCmd) Run(cfg *config.Config, args []string) error { // cfg заре
 		pass := args[2]
 		passPtr = &pass
 	}
-	r, done, err := bootstrap.OpenItemRepo()
+	repo, done, err := bootstrap.OpenItemRepo()
 	if err != nil {
 		return err
 	}
 	defer done()
-	svc := service.NewItemServiceLocal(r)
+	svc := service.NewItemServiceLocal(repo)
 	id, err := svc.Add(name, loginPtr, passPtr)
 	if err != nil {
 		return err

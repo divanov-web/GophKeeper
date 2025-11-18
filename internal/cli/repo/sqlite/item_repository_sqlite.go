@@ -15,7 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// ItemRepositorySQLite repo for items.
+// ItemRepositorySQLite — репозиторий для работы с items (локальная БД SQLite).
 type ItemRepositorySQLite struct {
 	db    *sql.DB
 	login string
@@ -145,10 +145,14 @@ func (r *ItemRepositorySQLite) GetItemByName(name string) (*model.Item, error) {
 	var it model.Item
 	var delInt int
 	err := r.db.QueryRow(`SELECT id, name, created_at, updated_at, version, deleted,
-     login_cipher, login_nonce, password_cipher, password_nonce
+     file_name, blob_id,
+     login_cipher, login_nonce, password_cipher, password_nonce,
+     text_cipher, text_nonce, card_cipher, card_nonce
    FROM items WHERE name = ?`, name).
 		Scan(&it.ID, &it.Name, &it.CreatedAt, &it.UpdatedAt, &it.Version, &delInt,
-			&it.LoginCipher, &it.LoginNonce, &it.PasswordCipher, &it.PasswordNonce)
+			&it.FileName, &it.BlobID,
+			&it.LoginCipher, &it.LoginNonce, &it.PasswordCipher, &it.PasswordNonce,
+			&it.TextCipher, &it.TextNonce, &it.CardCipher, &it.CardNonce)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("item with name %q not found", name)
@@ -157,4 +161,127 @@ func (r *ItemRepositorySQLite) GetItemByName(name string) (*model.Item, error) {
 	}
 	it.Deleted = delInt != 0
 	return &it, nil
+}
+
+// ensureItem возвращает id записи и признак created=true, если запись была создана.
+// Создаёт пустую запись, если её ещё не существует.
+func (r *ItemRepositorySQLite) ensureItem(name string) (string, bool, error) {
+	if err := ValidateName(name); err != nil {
+		return "", false, err
+	}
+	// пробуем прочитать id по имени
+	var id string
+	err := r.db.QueryRow(`SELECT id FROM items WHERE name = ?`, name).Scan(&id)
+	if err == nil {
+		return id, false, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", false, err
+	}
+	// создаём новую запись
+	id = uuid.NewString()
+	now := time.Now().Unix()
+	_, err = r.db.Exec(`INSERT INTO items(id, name, created_at, updated_at, version, deleted)
+        VALUES(?, ?, ?, ?, 1, 0)`, id, name, now, now)
+	if err != nil {
+		return "", false, err
+	}
+	return id, true, nil
+}
+
+// upsertFields обновляет указанные столбцы и увеличивает version/updated_at.
+// Если записи не было — создаёт её и устанавливает поля.
+func (r *ItemRepositorySQLite) upsertFields(name string, cols map[string][]byte) (string, bool, error) {
+	id, created, err := r.ensureItem(name)
+	if err != nil {
+		return "", false, err
+	}
+	if len(cols) == 0 {
+		return id, created, nil
+	}
+	// собираем часть SET для UPDATE
+	setParts := ""
+	args := make([]any, 0, len(cols)+2)
+	first := true
+	for col, val := range cols {
+		if !first {
+			setParts += ", "
+		}
+		setParts += col + " = ?"
+		args = append(args, val)
+		first = false
+	}
+	now := time.Now().Unix()
+	args = append(args, now, id)
+	q := fmt.Sprintf("UPDATE items SET %s, updated_at = ?, version = version + 1 WHERE id = ?", setParts)
+	if _, err := r.db.Exec(q, args...); err != nil {
+		return "", false, err
+	}
+	return id, created, nil
+}
+
+// UpsertLogin устанавливает/обновляет зашифрованный логин для записи name.
+func (r *ItemRepositorySQLite) UpsertLogin(name string, loginCipher, loginNonce []byte) (string, bool, error) {
+	return r.upsertFields(name, map[string][]byte{
+		"login_cipher": loginCipher,
+		"login_nonce":  loginNonce,
+	})
+}
+
+// UpsertPassword устанавливает/обновляет зашифрованный пароль для записи name.
+func (r *ItemRepositorySQLite) UpsertPassword(name string, passCipher, passNonce []byte) (string, bool, error) {
+	return r.upsertFields(name, map[string][]byte{
+		"password_cipher": passCipher,
+		"password_nonce":  passNonce,
+	})
+}
+
+// UpsertText устанавливает/обновляет зашифрованный произвольный текст для записи name.
+func (r *ItemRepositorySQLite) UpsertText(name string, textCipher, textNonce []byte) (string, bool, error) {
+	return r.upsertFields(name, map[string][]byte{
+		"text_cipher": textCipher,
+		"text_nonce":  textNonce,
+	})
+}
+
+// UpsertCard устанавливает/обновляет зашифрованные данные карты (JSON) для записи name.
+func (r *ItemRepositorySQLite) UpsertCard(name string, cardCipher, cardNonce []byte) (string, bool, error) {
+	return r.upsertFields(name, map[string][]byte{
+		"card_cipher": cardCipher,
+		"card_nonce":  cardNonce,
+	})
+}
+
+// UpsertFile сохраняет зашифрованный файл (blob) и обновляет поля file_name и blob_id.
+func (r *ItemRepositorySQLite) UpsertFile(name, fileName, blobID string, blobEncrypted []byte) (string, bool, error) {
+	if blobID == "" {
+		blobID = uuid.NewString()
+	}
+	// вычисляем путь для blob внутри каталога пользователя
+	base := os.Getenv("CLIENT_DB_PATH")
+	if base == "" {
+		cfgDir, err := os.UserConfigDir()
+		if err != nil {
+			return "", false, err
+		}
+		base = filepath.Join(cfgDir, "GophKeeper", "users")
+	}
+	dir := filepath.Join(base, r.login, "blobs")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", false, err
+	}
+	blobPath := filepath.Join(dir, blobID+".bin")
+	if err := os.WriteFile(blobPath, blobEncrypted, 0o600); err != nil {
+		return "", false, err
+	}
+	id, created, err := r.ensureItem(name)
+	if err != nil {
+		return "", false, err
+	}
+	now := time.Now().Unix()
+	if _, err := r.db.Exec(`UPDATE items SET file_name = ?, blob_id = ?, updated_at = ?, version = version + 1 WHERE id = ?`,
+		fileName, blobID, now, id); err != nil {
+		return "", false, err
+	}
+	return id, created, nil
 }

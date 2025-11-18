@@ -10,10 +10,11 @@ import (
 	"path/filepath"
 )
 
-// key length for AES-256
+// keyLen — длина ключа для AES‑256 (в байтах).
 const keyLen = 32
 
-// keyFilePath returns path to per-user key file alongside the SQLite DB, under the same base directory logic.
+// keyFilePath возвращает путь к пользовательскому файлу ключа рядом с БД SQLite
+// (используется та же логика базового каталога).
 func keyFilePath(login string) (string, error) {
 	if login == "" {
 		return "", errors.New("empty login for key path")
@@ -33,7 +34,7 @@ func keyFilePath(login string) (string, error) {
 	return filepath.Join(dir, "key.bin"), nil
 }
 
-// LoadOrCreateKey loads an existing key for the user or creates a new random one.
+// LoadOrCreateKey загружает существующий ключ пользователя или создаёт новый случайный.
 func LoadOrCreateKey(login string) ([]byte, error) {
 	path, err := keyFilePath(login)
 	if err != nil {
@@ -45,19 +46,20 @@ func LoadOrCreateKey(login string) ([]byte, error) {
 		}
 		return b, nil
 	}
-	// create new
+	// создаём новый ключ
 	key := make([]byte, keyLen)
 	if _, err := io.ReadFull(rand.Reader, key); err != nil {
 		return nil, err
 	}
-	// write with restricted perms
+	// записываем с ограниченными правами доступа
 	if err := os.WriteFile(path, key, 0o600); err != nil {
 		return nil, err
 	}
 	return key, nil
 }
 
-// Encrypt encrypts plain using AES-GCM with the provided key. Returns cipher and nonce.
+// Encrypt шифрует данные plain с помощью AES‑GCM и заданного ключа.
+// Возвращает шифртекст и nonce.
 func Encrypt(plain []byte, key []byte) ([]byte, []byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -75,7 +77,7 @@ func Encrypt(plain []byte, key []byte) ([]byte, []byte, error) {
 	return out, nonce, nil
 }
 
-// Decrypt decrypts cipher using AES-GCM with key and nonce.
+// Decrypt расшифровывает шифртекст cipher с использованием AES‑GCM, ключа и nonce.
 func Decrypt(ciphertext, nonce, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {

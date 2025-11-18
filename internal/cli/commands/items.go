@@ -20,12 +20,12 @@ func (itemsCmd) Run(cfg *config.Config, args []string) error {
 	if len(args) != 0 {
 		return ErrUsage
 	}
-	r, done, err := bootstrap.OpenItemRepo()
+	repo, done, err := bootstrap.OpenItemRepo()
 	if err != nil {
 		return err
 	}
 	defer done()
-	svc := service.NewItemServiceLocal(r)
+	svc := service.NewItemServiceLocal(repo)
 	list, err := svc.List()
 	if err != nil {
 		return err
