@@ -3,6 +3,7 @@ package handlers
 import (
 	"GophKeeper/internal/config"
 	"GophKeeper/internal/middleware"
+	"GophKeeper/internal/service"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -12,12 +13,13 @@ import (
 
 // ItemHandler обрабатывает синхронизацию записей и загрузку блобов.
 type ItemHandler struct {
-	Logger *zap.SugaredLogger
-	Config *config.Config
+	ItemService *service.ItemService
+	Logger      *zap.SugaredLogger
+	Config      *config.Config
 }
 
-func NewItemHandler(logger *zap.SugaredLogger, cfg *config.Config) *ItemHandler {
-	return &ItemHandler{Logger: logger, Config: cfg}
+func NewItemHandler(itemService *service.ItemService, logger *zap.SugaredLogger, cfg *config.Config) *ItemHandler {
+	return &ItemHandler{ItemService: itemService, Logger: logger, Config: cfg}
 }
 
 // SyncRequest — минимальный контракт синхронизации (батч изменений).
@@ -66,11 +68,31 @@ func (h *ItemHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, _ := middleware.GetUserIDFromContext(r.Context())
+
+	// Преобразуем запрос хендлера в сервисный DTO (минимально, для заглушки)
+	var sincePtr *time.Time
+	if req.LastSyncAt != "" {
+		if t, err := time.Parse(time.RFC3339, req.LastSyncAt); err == nil {
+			sincePtr = &t
+		}
+	}
+	svcReq := service.SyncRequest{LastSyncAt: sincePtr, Changes: make([]service.SyncChange, 0, len(req.Changes))}
+	for _, ch := range req.Changes {
+		svcReq.Changes = append(svcReq.Changes, service.SyncChange{
+			ID:      ch.ID,
+			Version: ch.Version,
+			Deleted: ch.Deleted,
+		})
+	}
+
+	res, _ := h.ItemService.Sync(r.Context(), userID, svcReq)
+
 	resp := SyncResponse{
 		Applied:       []any{},
 		Conflicts:     []any{},
 		ServerChanges: []any{},
-		ServerTime:    time.Now().UTC().Format(time.RFC3339),
+		ServerTime:    res.ServerTime.UTC().Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")

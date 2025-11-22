@@ -47,10 +47,12 @@ func main() {
 
 	userRepo := repo.NewUserRepository(gormDB)
 	userService := service.NewUserService(userRepo)
+	itemRepo := repo.NewItemRepository(gormDB)
+	itemService := service.NewItemService(itemRepo)
 
 	fmt.Println(userService.TestData())
 
-	h := handlers.NewHandler(userService, sugar, cfg)
+	h := handlers.NewHandler(userService, itemService, sugar, cfg)
 
 	addr := cfg.BaseURL
 

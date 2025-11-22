@@ -16,6 +16,7 @@ type Handler struct {
 // NewHandler разводящий для хендлеров
 func NewHandler(
 	userService *service.UserService,
+	itemService *service.ItemService,
 	logger *zap.SugaredLogger,
 	config *config.Config,
 ) *Handler {
@@ -27,7 +28,7 @@ func NewHandler(
 
 	// Handlers
 	userHandler := NewUserHandler(userService, logger, config)
-	itemHandler := NewItemHandler(logger, config)
+	itemHandler := NewItemHandler(itemService, logger, config)
 
 	// User routes
 	r.Post("/api/user/register", userHandler.Register)
