@@ -27,11 +27,16 @@ func NewHandler(
 
 	// Handlers
 	userHandler := NewUserHandler(userService, logger, config)
+	itemHandler := NewItemHandler(logger, config)
 
 	// User routes
 	r.Post("/api/user/register", userHandler.Register)
 	r.Post("/api/user/login", userHandler.Login)
 	r.Post("/api/user/test", userHandler.Status)
+
+	// Items/Blobs routes (stubs for now)
+	r.Post("/api/items/sync", itemHandler.Sync)
+	r.Post("/api/blobs/upload", itemHandler.UploadBlob)
 
 	return &Handler{Router: r}
 }
