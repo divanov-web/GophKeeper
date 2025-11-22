@@ -208,13 +208,13 @@ func (s ItemServiceLocal) Edit(name, fieldType string, value []string) (string, 
 		if err != nil {
 			return "", false, fmt.Errorf("чтение файла: %w", err)
 		}
-		c, _, err := crypto.Encrypt(data, key)
+		c, n, err := crypto.Encrypt(data, key)
 		if err != nil {
 			return "", false, err
 		}
 		fileName := filepath.Base(path)
 		// передаём содержимое и имя файла.
-		return s.repo.UpsertFile(name, fileName, "", c)
+		return s.repo.UpsertFile(name, fileName, c, n)
 	default:
 		return "", false, fmt.Errorf("неизвестный тип: %s (ожидается: login|password|text|card|file)", fieldType)
 	}

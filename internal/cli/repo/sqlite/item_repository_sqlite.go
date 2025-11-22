@@ -230,35 +230,33 @@ func (r *ItemRepositorySQLite) UpsertCard(name string, cardCipher, cardNonce []b
 	})
 }
 
-// UpsertFile сохраняет зашифрованный файл (blob) и обновляет поля file_name и blob_id.
-func (r *ItemRepositorySQLite) UpsertFile(name, fileName, blobID string, blobEncrypted []byte) (string, bool, error) {
-	if blobID == "" {
-		blobID = uuid.NewString()
-	}
-	// вычисляем путь для blob внутри каталога пользователя
-	base := os.Getenv("CLIENT_DB_PATH")
-	if base == "" {
-		cfgDir, err := os.UserConfigDir()
-		if err != nil {
-			return "", false, err
-		}
-		base = filepath.Join(cfgDir, "GophKeeper", "users")
-	}
-	dir := filepath.Join(base, r.login, "blobs")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", false, err
-	}
-	blobPath := filepath.Join(dir, blobID+".bin")
-	if err := os.WriteFile(blobPath, blobEncrypted, 0o600); err != nil {
-		return "", false, err
-	}
+// UpsertFile сохраняет зашифрованный файл в таблицу blobs и обновляет связь в items.
+func (r *ItemRepositorySQLite) UpsertFile(name, fileName string, blobCipher, blobNonce []byte) (string, bool, error) {
+	// Убедимся, что item существует (или создадим)
 	id, created, err := r.ensureItem(name)
 	if err != nil {
 		return "", false, err
 	}
+	// Транзакция: вставить blob и обновить item
+	tx, err := r.db.Begin()
+	if err != nil {
+		return "", false, err
+	}
+	defer func() {
+		// в случае panic или некоммита — откат
+		_ = tx.Rollback()
+	}()
+
+	blobID := uuid.NewString()
+	if _, err := tx.Exec(`INSERT INTO blobs(id, cipher, nonce) VALUES(?, ?, ?)`, blobID, blobCipher, blobNonce); err != nil {
+		return "", false, err
+	}
 	now := time.Now().Unix()
-	if _, err := r.db.Exec(`UPDATE items SET file_name = ?, blob_id = ?, updated_at = ?, version = version + 1 WHERE id = ?`,
+	if _, err := tx.Exec(`UPDATE items SET file_name = ?, blob_id = ?, updated_at = ?, version = version + 1 WHERE id = ?`,
 		fileName, blobID, now, id); err != nil {
+		return "", false, err
+	}
+	if err := tx.Commit(); err != nil {
 		return "", false, err
 	}
 	return id, created, nil

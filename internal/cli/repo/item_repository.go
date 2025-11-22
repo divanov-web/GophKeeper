@@ -27,7 +27,6 @@ type ItemRepository interface {
 	// UpsertCard устанавливает/обновляет зашифрованные данные карты (JSON) для записи name.
 	UpsertCard(name string, cardCipher, cardNonce []byte) (id string, created bool, err error)
 
-	// UpsertFile сохраняет файл: записывает зашифрованный blob в файловую систему
-	// и в таблицу items проставляет file_name и blob_id. Данные blobEncrypted должны быть уже зашифрованы на уровне сервиса.
-	UpsertFile(name, fileName, blobID string, blobEncrypted []byte) (id string, created bool, err error)
+	// UpsertFile сохраняет зашифрованный файл в таблицу blobs и проставляет связь в items.
+	UpsertFile(name, fileName string, blobCipher, blobNonce []byte) (id string, created bool, err error)
 }
