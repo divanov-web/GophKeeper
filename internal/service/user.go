@@ -15,6 +15,7 @@ type UserService struct {
 
 var ErrLoginTaken = errors.New("login already in use")
 
+// NewUserService создаёт сервис пользователей
 func NewUserService(repo repo.UserRepository) *UserService {
 	return &UserService{repo: repo}
 }
@@ -53,6 +54,7 @@ func (s *UserService) Login(ctx context.Context, login, password string) (*model
 	return user, nil
 }
 
+// TestData тестовый ответ сервиса
 func (s *UserService) TestData() (string, error) {
 	return "test", nil
 }

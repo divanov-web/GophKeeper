@@ -18,6 +18,7 @@ type UserHandler struct {
 	Config      *config.Config
 }
 
+// NewUserHandler создаёт хендлер пользователей
 func NewUserHandler(userService *service.UserService, logger *zap.SugaredLogger, config *config.Config) *UserHandler {
 	return &UserHandler{
 		UserService: userService,
