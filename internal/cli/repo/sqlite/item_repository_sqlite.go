@@ -87,7 +87,7 @@ func (r *ItemRepositorySQLite) AddEncrypted(name string, loginCipher, loginNonce
         id, name, created_at, updated_at, version, deleted,
         login_cipher, login_nonce, password_cipher, password_nonce
     ) VALUES(?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
-		id, name, now, now, 1, loginCipher, loginNonce, passCipher, passNonce,
+		id, name, now, now, 0, loginCipher, loginNonce, passCipher, passNonce,
 	)
 	if err != nil {
 		return "", err
@@ -160,7 +160,7 @@ func (r *ItemRepositorySQLite) ensureItem(name string) (string, bool, error) {
 	id = uuid.NewString()
 	now := time.Now().Unix()
 	_, err = r.db.Exec(`INSERT INTO items(id, name, created_at, updated_at, version, deleted)
-        VALUES(?, ?, ?, ?, 1, 0)`, id, name, now, now)
+        VALUES(?, ?, ?, ?, 0, 0)`, id, name, now, now)
 	if err != nil {
 		return "", false, err
 	}
@@ -191,7 +191,7 @@ func (r *ItemRepositorySQLite) upsertFields(name string, cols map[string][]byte)
 	}
 	now := time.Now().Unix()
 	args = append(args, now, id)
-	q := fmt.Sprintf("UPDATE items SET %s, updated_at = ?, version = version + 1 WHERE id = ?", setParts)
+	q := fmt.Sprintf("UPDATE items SET %s, updated_at = ? WHERE id = ?", setParts)
 	if _, err := r.db.Exec(q, args...); err != nil {
 		return "", false, err
 	}
@@ -252,7 +252,7 @@ func (r *ItemRepositorySQLite) UpsertFile(name, fileName string, blobCipher, blo
 		return "", false, err
 	}
 	now := time.Now().Unix()
-	if _, err := tx.Exec(`UPDATE items SET file_name = ?, blob_id = ?, updated_at = ?, version = version + 1 WHERE id = ?`,
+	if _, err := tx.Exec(`UPDATE items SET file_name = ?, blob_id = ?, updated_at = ? WHERE id = ?`,
 		fileName, blobID, now, id); err != nil {
 		return "", false, err
 	}
@@ -260,4 +260,14 @@ func (r *ItemRepositorySQLite) UpsertFile(name, fileName string, blobCipher, blo
 		return "", false, err
 	}
 	return id, created, nil
+}
+
+// SetServerVersion устанавливает серверную версию для записи по id и обновляет updated_at
+func (r *ItemRepositorySQLite) SetServerVersion(id string, version int64) error {
+	if id == "" {
+		return errors.New("empty id")
+	}
+	now := time.Now().Unix()
+	_, err := r.db.Exec(`UPDATE items SET version = ?, updated_at = ? WHERE id = ?`, version, now, id)
+	return err
 }

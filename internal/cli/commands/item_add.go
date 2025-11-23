@@ -53,6 +53,23 @@ func (itemAddCmd) Run(cfg *config.Config, args []string) error { // cfg заре
 	if passPtr != nil {
 		fmt.Println("  password: <set>")
 	}
+
+	// Синхронизация с сервером
+	fmt.Println("→ Синхронизация с сервером...")
+	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, true)
+	if syncErr != nil {
+		fmt.Printf("× Ошибка отправки: %v\n", syncErr)
+		return nil
+	}
+	if applied {
+		fmt.Printf("✓ Синхронизировано. Новая версия: %d\n", newVer)
+		return nil
+	}
+	if conflicts != "" {
+		fmt.Printf("! Конфликт на сервере: %s\n", conflicts)
+		return nil
+	}
+	fmt.Println("• Синхронизация завершена: изменений не применено")
 	return nil
 }
 

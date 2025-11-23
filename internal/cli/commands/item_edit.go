@@ -59,6 +59,23 @@ func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зар�
 	fmt.Printf("  id:   %s\n", id)
 	fmt.Printf("  name: %s\n", name)
 	fmt.Printf("  %s: <set>\n", fieldType)
+
+	// Синхронизация с сервером
+	fmt.Println("→ Синхронизация с сервером (/api/items/sync)...")
+	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, created)
+	if syncErr != nil {
+		fmt.Printf("× Ошибка отправки: %v\n", syncErr)
+		return nil
+	}
+	if applied {
+		fmt.Printf("✓ Синхронизировано. Новая версия: %d\n", newVer)
+		return nil
+	}
+	if conflicts != "" {
+		fmt.Printf("! Конфликт на сервере: %s\n", conflicts)
+		return nil
+	}
+	fmt.Println("• Синхронизация завершена: изменений не применено")
 	return nil
 }
 

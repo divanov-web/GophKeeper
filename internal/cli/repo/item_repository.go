@@ -29,4 +29,7 @@ type ItemRepository interface {
 
 	// UpsertFile сохраняет зашифрованный файл в таблицу blobs и проставляет связь в items.
 	UpsertFile(name, fileName string, blobCipher, blobNonce []byte) (id string, created bool, err error)
+
+	// SetServerVersion устанавливает серверную версию для записи по id
+	SetServerVersion(id string, version int64) error
 }
