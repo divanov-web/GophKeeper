@@ -56,7 +56,7 @@ func (itemAddCmd) Run(cfg *config.Config, args []string) error { // cfg заре
 
 	// Синхронизация с сервером
 	fmt.Println("→ Синхронизация с сервером...")
-	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, true)
+	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, true, nil)
 	if syncErr != nil {
 		fmt.Printf("× Ошибка отправки: %v\n", syncErr)
 		return nil

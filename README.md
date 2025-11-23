@@ -64,7 +64,7 @@ bin/gkcli.exe --version
 - `bin/gkcli.exe status` - проверка авторизации
 - `bin/gkcli.exe items` - показать все записи
 - `bin/gkcli.exe item-add <name> [<login> [<password>]]` - создать запись, при желании сразу добавить логин и пароль (оба параметра необязательные)
-- `bin/gkcli.exe item-edit <name> <type> <value>` - отредактировать/добавить поле в записи `<name>`. Где `<type>` одно из: `login|password|text|card|file`
+- `bin/gkcli.exe item-edit [--resolve=client|server] <name> <type> <value> [<value2> <value3> <value4>]` - отредактировать/добавить поле в записи `<name>`. Где `<type>` одно из: `login|password|text|card|file`
 - `bin/gkcli.exe item-get <name>` - показать запись по `<name>`
 
 ### Примеры item-add
@@ -72,6 +72,8 @@ bin/gkcli.exe --version
 
 ### Примеры item-edit
 - Текст: `bin\gkcli.exe item-edit myItem text "Это произвольный текст"`
+- С указанием стратегии конфликтов (client): `bin\gkcli.exe item-edit --resolve=client myItem text "Это произвольный текст"`
+- С указанием стратегии конфликтов (server): `bin\gkcli.exe item-edit --resolve=server myItem text "Это произвольный текст"`
 - Карта  `bin\gkcli.exe item-edit myItem card <number> <card_holder> <exp> <cvc>`
   - `bin\gkcli.exe item-edit myItem card "4111 1111 1111 1111" "JOHN DOE" "12/25" "123"`
 - Файл: `bin/gkcli.exe item-edit myItem file C:\path\to\document.pdf`

@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"flag"
 	"fmt"
+	"io"
 
 	"GophKeeper/internal/cli/bootstrap"
 	"GophKeeper/internal/cli/service"
@@ -15,16 +17,31 @@ func (itemEditCmd) Description() string {
 	return "Отредактировать/добавить поле записи: login|password|text|card|file"
 }
 func (itemEditCmd) Usage() string {
-	return "item-edit <name> <type> <value> [<value2> <value3> <value4>]"
+	return "item-edit [--resolve=client|server] <name> <type> <value> [<value2> <value3> <value4>]"
 }
 
 func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зарезервирован на будущее
-	if len(args) < 3 {
+	// Парсим флагами: разрешаем только префиксные флаги перед позиционными аргументами
+	fs := flag.NewFlagSet("item-edit", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	resolve := fs.String("resolve", "", "стратегия разрешения конфликта: client|server")
+	if err := fs.Parse(args); err != nil {
 		return ErrUsage
 	}
-	name := args[0]
-	fieldType := args[1]
-	values := args[2:]
+	rest := fs.Args()
+	if len(rest) < 3 {
+		return ErrUsage
+	}
+	name := rest[0]
+	fieldType := rest[1]
+	values := rest[2:]
+	var resolvePtr *string
+	if *resolve != "" {
+		if *resolve != "client" && *resolve != "server" {
+			return ErrUsage
+		}
+		resolvePtr = resolve
+	}
 
 	// Валидация кол-ва аргументов по типу
 	switch fieldType {
@@ -62,7 +79,7 @@ func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зар�
 
 	// Синхронизация с сервером
 	fmt.Println("→ Синхронизация с сервером (/api/items/sync)...")
-	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, created)
+	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, created, resolvePtr)
 	if syncErr != nil {
 		fmt.Printf("× Ошибка отправки: %v\n", syncErr)
 		return nil
@@ -73,6 +90,10 @@ func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зар�
 	}
 	if conflicts != "" {
 		fmt.Printf("! Конфликт на сервере: %s\n", conflicts)
+		if resolvePtr != nil && *resolvePtr == "server" {
+			// Мы привели локальную версию к серверной, чтобы следующий запрос не конфликтовал
+			fmt.Println("• Локальная версия выровнена с серверной (resolve=server)")
+		}
 		return nil
 	}
 	fmt.Println("• Синхронизация завершена: изменений не применено")

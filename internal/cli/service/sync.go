@@ -40,8 +40,9 @@ type appliedDTO struct {
 }
 
 type conflictDTO struct {
-	ID     string `json:"id"`
-	Reason string `json:"reason"`
+	ID         string         `json:"id"`
+	Reason     string         `json:"reason"`
+	ServerItem map[string]any `json:"server_item,omitempty"`
 }
 
 type syncResponse struct {
@@ -53,14 +54,16 @@ type syncResponse struct {
 // SyncItemToServer отправляет один item на сервер через /api/items/sync.
 // isNew указывает, что запись только что создана локально — в этом случае отправляем version=0.
 // Возвращает (applied, newVersion, conflictsText, err).
-func SyncItemToServer(cfg *config.Config, item model.Item, isNew bool) (bool, int64, string, error) {
+// resolve: nil (по умолчанию), либо указатель на строку "client" или "server"
+// Возвращает: applied, newVersion (если применено), serverVersion (если конфликт и сервер версию вернул), conflictsText, err
+func SyncItemToServer(cfg *config.Config, item model.Item, isNew bool, resolve *string) (bool, int64, int64, string, error) {
 	if cfg == nil {
-		return false, 0, "", fmt.Errorf("nil config")
+		return false, 0, 0, "", fmt.Errorf("nil config")
 	}
 	// токен авторизации
 	token, err := (fsrepo.AuthFSStore{}).Load()
 	if err != nil {
-		return false, 0, "", fmt.Errorf("нет токена авторизации: %w", err)
+		return false, 0, 0, "", fmt.Errorf("нет токена авторизации: %w", err)
 	}
 	// собираем change
 	chg := syncChange{ID: item.ID}
@@ -71,6 +74,10 @@ func SyncItemToServer(cfg *config.Config, item model.Item, isNew bool) (bool, in
 	} else {
 		v := item.Version
 		chg.Version = &v
+	}
+	if resolve != nil && (*resolve == "client" || *resolve == "server") {
+		r := *resolve
+		chg.Resolve = &r
 	}
 	if item.Name != "" {
 		n := item.Name
@@ -114,33 +121,49 @@ func SyncItemToServer(cfg *config.Config, item model.Item, isNew bool) (bool, in
 	url := cfg.ServerURL + "/api/items/sync"
 	resp, body, err := api.PostJSON(url, payload, token)
 	if err != nil {
-		return false, 0, "", err
+		return false, 0, 0, "", err
 	}
 	if resp.StatusCode != 200 {
-		return false, 0, "", fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
+		return false, 0, 0, "", fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
 	}
 	var sr syncResponse
 	if err := json.Unmarshal(body, &sr); err != nil {
-		return false, 0, "", err
+		return false, 0, 0, "", err
 	}
 	if len(sr.Applied) > 0 {
-		return true, sr.Applied[0].NewVersion, "", nil
+		return true, sr.Applied[0].NewVersion, 0, "", nil
 	}
 	if len(sr.Conflicts) > 0 {
 		// конкатенируем причины для краткого вывода
+		// попробуем вытащить серверную версию из первого конфликта, если она есть
+		var serverVer int64
+		if si := sr.Conflicts[0].ServerItem; si != nil {
+			if v, ok := si["version"]; ok {
+				switch vv := v.(type) {
+				case float64:
+					serverVer = int64(vv)
+				case int64:
+					serverVer = vv
+				case json.Number:
+					if iv, err := vv.Int64(); err == nil {
+						serverVer = iv
+					}
+				}
+			}
+		}
 		b, _ := json.Marshal(sr.Conflicts)
-		return false, 0, string(b), nil
+		return false, 0, serverVer, string(b), nil
 	}
-	return false, 0, "", nil
+	return false, 0, 0, "", nil
 }
 
 // SyncItemByName загружает локальный item по имени и синхронизирует его на сервере.
-func SyncItemByName(cfg *config.Config, r crepo.ItemRepository, name string, isNew bool) (bool, int64, string, error) {
+func SyncItemByName(cfg *config.Config, r crepo.ItemRepository, name string, isNew bool, resolve *string) (bool, int64, string, error) {
 	it, err := r.GetItemByName(name)
 	if err != nil {
 		return false, 0, "", err
 	}
-	applied, newVer, conflicts, syncErr := SyncItemToServer(cfg, *it, isNew)
+	applied, newVer, serverVer, conflicts, syncErr := SyncItemToServer(cfg, *it, isNew, resolve)
 	if syncErr != nil {
 		return false, 0, conflicts, syncErr
 	}
@@ -150,6 +173,14 @@ func SyncItemByName(cfg *config.Config, r crepo.ItemRepository, name string, isN
 			// Не считаем это фатальной ошибкой отправки: версию можно синхронизировать позже
 			// но сообщим вызывающему коду через обёртку ошибки
 			return applied, newVer, conflicts, fmt.Errorf("failed to persist server version locally: %w", err)
+		}
+		return applied, newVer, conflicts, nil
+	}
+	// Если не применено и запрошено resolve=server — считаем, что пользователь выбрал серверную версию.
+	// Тогда, если сервер прислал свою версию — зафиксируем её локально, чтобы следующий запрос не конфликтовал.
+	if resolve != nil && *resolve == "server" && serverVer > 0 {
+		if err := r.SetServerVersion(it.ID, serverVer); err != nil {
+			return false, 0, conflicts, fmt.Errorf("failed to persist server version locally: %w", err)
 		}
 	}
 	return applied, newVer, conflicts, nil
