@@ -49,7 +49,7 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	itemRepo := repo.NewItemRepository(gormDB)
 	blobRepo := repo.NewBlobRepository(gormDB)
-	itemService := service.NewItemService(itemRepo, blobRepo)
+	itemService := service.NewItemService(itemRepo, blobRepo, sugar)
 
 	fmt.Println(userService.TestData())
 

@@ -8,6 +8,7 @@ import (
 	"GophKeeper/internal/config"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // syncRequest/response DTOs соответствуют серверному API /api/items/sync
@@ -184,4 +185,57 @@ func SyncItemByName(cfg *config.Config, r crepo.ItemRepository, name string, isN
 		}
 	}
 	return applied, newVer, conflicts, nil
+}
+
+// UploadResult результат асинхронной загрузки блоба
+type UploadResult struct {
+	BlobID  string
+	Created bool // true, если блоб создан впервые (201), false — уже существовал (200)
+	Size    int  // размер cipher
+	Err     error
+}
+
+// UploadBlobAsync запускает асинхронную загрузку блоба на сервер в отдельной горутине.
+// Возвращает канал, в который по завершении будет отправлен UploadResult.
+func UploadBlobAsync(cfg *config.Config, r crepo.ItemRepository, blobID string) <-chan UploadResult {
+	out := make(chan UploadResult, 1)
+	go func() {
+		defer close(out)
+		// искусственная задержка
+		time.Sleep(2 * time.Second)
+
+		// Загружаем токен
+		token, err := (fsrepo.AuthFSStore{}).Load()
+		if err != nil {
+			out <- UploadResult{BlobID: blobID, Err: fmt.Errorf("нет токена авторизации: %w", err)}
+			return
+		}
+		// Берём блоб из локальной БД
+		b, err := r.GetBlobByID(blobID)
+		if err != nil {
+			out <- UploadResult{BlobID: blobID, Err: err}
+			return
+		}
+		url := cfg.ServerURL + "/api/blobs/upload"
+		resp, body, err := api.PostMultipartBlob(url, b.ID, b.Cipher, b.Nonce, token)
+		if err != nil {
+			out <- UploadResult{BlobID: blobID, Err: err}
+			return
+		}
+		created := false
+		switch resp.StatusCode {
+		case 200:
+			created = false
+		case 201:
+			created = true
+		case 400, 401, 413:
+			out <- UploadResult{BlobID: blobID, Err: fmt.Errorf("upload failed: %s", string(body))}
+			return
+		default:
+			out <- UploadResult{BlobID: blobID, Err: fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))}
+			return
+		}
+		out <- UploadResult{BlobID: blobID, Created: created, Size: len(b.Cipher), Err: nil}
+	}()
+	return out
 }

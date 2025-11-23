@@ -77,6 +77,18 @@ func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зар�
 	fmt.Printf("  name: %s\n", name)
 	fmt.Printf("  %s: <set>\n", fieldType)
 
+	// Если редактируем файл — запускаем параллельную загрузку блоба на сервер
+	var uploadCh <-chan service.UploadResult
+	if fieldType == "file" {
+		// Получим текущий item, чтобы узнать blob_id
+		it, gerr := repo.GetItemByName(name)
+		if gerr != nil {
+			fmt.Printf("× Не удалось получить запись для загрузки файла: %v\n", gerr)
+		} else if it.BlobID != "" {
+			uploadCh = service.UploadBlobAsync(cfg, repo, it.BlobID)
+		}
+	}
+
 	// Синхронизация с сервером
 	fmt.Println("→ Синхронизация с сервером (/api/items/sync)...")
 	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, created, resolvePtr)
@@ -97,6 +109,20 @@ func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зар�
 		return nil
 	}
 	fmt.Println("• Синхронизация завершена: изменений не применено")
+
+	// Если запускалась параллельная загрузка файла — дождёмся результата и выведем сообщение
+	if uploadCh != nil {
+		res := <-uploadCh
+		if res.Err != nil {
+			fmt.Printf("× Ошибка загрузки файла: %v\n", res.Err)
+		} else {
+			if res.Created {
+				fmt.Printf("✓ Файл загружен (blob_id=%s, size=%d байт)\n", res.BlobID, res.Size)
+			} else {
+				fmt.Printf("✓ Файл уже был загружен ранее (blob_id=%s, size=%d байт)\n", res.BlobID, res.Size)
+			}
+		}
+	}
 	return nil
 }
 

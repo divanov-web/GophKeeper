@@ -18,7 +18,6 @@ func InitDB(dsn string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("gorm open: %w", err)
 	}
 
-	// Порядок важен для внешних ключей: User -> Blob -> Item
 	if err := db.AutoMigrate(&model.User{}, &model.Blob{}, &model.Item{}); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}

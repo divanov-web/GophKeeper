@@ -271,3 +271,20 @@ func (r *ItemRepositorySQLite) SetServerVersion(id string, version int64) error 
 	_, err := r.db.Exec(`UPDATE items SET version = ?, updated_at = ? WHERE id = ?`, version, now, id)
 	return err
 }
+
+// GetBlobByID возвращает блоб по идентификатору
+func (r *ItemRepositorySQLite) GetBlobByID(id string) (*model.Blob, error) {
+	if id == "" {
+		return nil, errors.New("empty blob id")
+	}
+	var b model.Blob
+	err := r.db.QueryRow(`SELECT id, cipher, nonce FROM blobs WHERE id = ?`, id).
+		Scan(&b.ID, &b.Cipher, &b.Nonce)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("blob %s not found", id)
+		}
+		return nil, err
+	}
+	return &b, nil
+}

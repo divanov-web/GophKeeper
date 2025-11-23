@@ -13,8 +13,7 @@ type Item struct {
 	Name     string `gorm:"not null"`
 	FileName string
 
-	BlobID *string `gorm:"type:uuid;index"` // опциональная ссылка на blobs.id
-	Blob   *Blob   `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL"`
+	BlobID *string `gorm:"type:uuid;index"`
 
 	Version int64 `gorm:"not null;default:1"`
 	Deleted bool  `gorm:"not null;default:false"`

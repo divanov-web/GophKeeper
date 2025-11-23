@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -14,11 +15,12 @@ import (
 type ItemService struct {
 	repo     repo.ItemRepository
 	blobRepo repo.BlobRepository
+	logger   *zap.SugaredLogger
 }
 
 // NewItemService создаёт сервис Item.
-func NewItemService(r repo.ItemRepository, br repo.BlobRepository) *ItemService {
-	return &ItemService{repo: r, blobRepo: br}
+func NewItemService(r repo.ItemRepository, br repo.BlobRepository, logger *zap.SugaredLogger) *ItemService {
+	return &ItemService{repo: r, blobRepo: br, logger: logger}
 }
 
 // SaveBlob сохраняет блоб идемпотентно. Возвращает created=true, если блоб был создан.
@@ -103,6 +105,13 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 					it.Version = 1
 					it.UpdatedAt = time.Now().UTC()
 					if err := s.repo.Create(ctx, &it); err != nil {
+						if s.logger != nil {
+							s.logger.Errorw("Sync: create item failed",
+								"user_id", userID,
+								"item_id", ch.ID,
+								"error", err,
+							)
+						}
 						// внутренняя ошибка — оформим как конфликт общего вида
 						res.Conflicts = append(res.Conflicts, ConflictResult{ID: ch.ID, Reason: "internal_error"})
 						continue
@@ -115,6 +124,13 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 				continue
 			}
 			// другая ошибка чтения
+			if s.logger != nil {
+				s.logger.Errorw("Sync: get item failed",
+					"user_id", userID,
+					"item_id", ch.ID,
+					"error", err,
+				)
+			}
 			res.Conflicts = append(res.Conflicts, ConflictResult{ID: ch.ID, Reason: "internal_error"})
 			continue
 		}
@@ -129,6 +145,14 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 			updates := buildPatchFromChange(ch, current)
 			newVer, err := s.repo.UpdateWithVersion(ctx, userID, ch.ID, current.Version, updates)
 			if err != nil {
+				if s.logger != nil {
+					s.logger.Errorw("Sync: update with version failed",
+						"user_id", userID,
+						"item_id", ch.ID,
+						"expected_version", current.Version,
+						"error", err,
+					)
+				}
 				res.Conflicts = append(res.Conflicts, ConflictResult{ID: ch.ID, Reason: "internal_error"})
 				continue
 			}
@@ -145,6 +169,14 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 				updates := buildPatchFromChange(ch, current)
 				newVer, err := s.repo.UpdateWithVersion(ctx, userID, ch.ID, current.Version, updates)
 				if err != nil {
+					if s.logger != nil {
+						s.logger.Errorw("Sync: force client resolve update failed",
+							"user_id", userID,
+							"item_id", ch.ID,
+							"expected_version", current.Version,
+							"error", err,
+						)
+					}
 					res.Conflicts = append(res.Conflicts, ConflictResult{ID: ch.ID, Reason: "internal_error"})
 					continue
 				}
@@ -161,6 +193,14 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 			updates := buildPatchFromChange(ch, current)
 			newVer, err := s.repo.UpdateWithVersion(ctx, userID, ch.ID, current.Version, updates)
 			if err != nil {
+				if s.logger != nil {
+					s.logger.Errorw("Sync: auto-resolve update failed",
+						"user_id", userID,
+						"item_id", ch.ID,
+						"expected_version", current.Version,
+						"error", err,
+					)
+				}
 				res.Conflicts = append(res.Conflicts, ConflictResult{ID: ch.ID, Reason: "internal_error"})
 				continue
 			}
@@ -176,6 +216,12 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 	if req.LastSyncAt != nil {
 		if items, err := s.repo.GetItemsUpdatedSince(ctx, userID, *req.LastSyncAt); err == nil {
 			res.ServerChanges = items
+		} else if s.logger != nil {
+			s.logger.Errorw("Sync: get items since failed",
+				"user_id", userID,
+				"since", req.LastSyncAt.UTC().Format(time.RFC3339),
+				"error", err,
+			)
 		}
 	}
 

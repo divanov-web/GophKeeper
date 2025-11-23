@@ -32,4 +32,7 @@ type ItemRepository interface {
 
 	// SetServerVersion устанавливает серверную версию для записи по id
 	SetServerVersion(id string, version int64) error
+
+	// GetBlobByID возвращает блоб по идентификатору
+	GetBlobByID(id string) (*model.Blob, error)
 }

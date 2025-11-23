@@ -78,6 +78,9 @@ func (h *ItemHandler) Sync(w http.ResponseWriter, r *http.Request) {
 
 	var req SyncRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if h.Logger != nil {
+			h.Logger.Warnw("Sync: invalid request body", "error", err)
+		}
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -89,6 +92,8 @@ func (h *ItemHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	if req.LastSyncAt != "" {
 		if t, err := time.Parse(time.RFC3339, req.LastSyncAt); err == nil {
 			sincePtr = &t
+		} else if h.Logger != nil {
+			h.Logger.Warnw("Sync: invalid last_sync_at", "value", req.LastSyncAt, "error", err)
 		}
 	}
 	svcReq := service.SyncRequest{LastSyncAt: sincePtr, Changes: make([]service.SyncChange, 0, len(req.Changes))}
@@ -112,7 +117,14 @@ func (h *ItemHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	res, _ := h.ItemService.Sync(r.Context(), userID, svcReq)
+	res, err := h.ItemService.Sync(r.Context(), userID, svcReq)
+	if err != nil {
+		if h.Logger != nil {
+			h.Logger.Errorw("Sync: service error", "user_id", userID, "error", err)
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
 	// Маппинг ответа сервиса в HTTP DTO
 	applied := make([]AppliedDTO, 0, len(res.Applied))
@@ -162,12 +174,18 @@ func (h *ItemHandler) UploadBlob(w http.ResponseWriter, r *http.Request) {
 
 	// Парсим multipart/form-data
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		if h.Logger != nil {
+			h.Logger.Warnw("UploadBlob: invalid multipart form", "error", err)
+		}
 		http.Error(w, "invalid multipart form", http.StatusBadRequest)
 		return
 	}
 
 	id := r.FormValue("id")
 	if id == "" {
+		if h.Logger != nil {
+			h.Logger.Warnw("UploadBlob: missing id")
+		}
 		http.Error(w, "missing id", http.StatusBadRequest)
 		return
 	}
@@ -175,17 +193,26 @@ func (h *ItemHandler) UploadBlob(w http.ResponseWriter, r *http.Request) {
 	// Читаем cipher как файл
 	cipherFile, _, err := r.FormFile("cipher")
 	if err != nil {
+		if h.Logger != nil {
+			h.Logger.Warnw("UploadBlob: missing cipher file", "error", err)
+		}
 		http.Error(w, "missing cipher file", http.StatusBadRequest)
 		return
 	}
 	defer cipherFile.Close()
 	cipherBytes, err := io.ReadAll(cipherFile)
 	if err != nil {
+		if h.Logger != nil {
+			h.Logger.Warnw("UploadBlob: failed to read cipher", "error", err)
+		}
 		http.Error(w, "failed to read cipher", http.StatusBadRequest)
 		return
 	}
 	maxCipher := int64(h.Config.BlobMaxSizeMB) * 1024 * 1024
 	if int64(len(cipherBytes)) > maxCipher {
+		if h.Logger != nil {
+			h.Logger.Warnw("UploadBlob: payload too large", "id", id, "size", len(cipherBytes), "limit", maxCipher)
+		}
 		http.Error(w, "payload too large", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -194,6 +221,9 @@ func (h *ItemHandler) UploadBlob(w http.ResponseWriter, r *http.Request) {
 	if nonceStr := r.FormValue("nonce"); nonceStr != "" {
 		nb, decErr := base64.StdEncoding.DecodeString(nonceStr)
 		if decErr != nil {
+			if h.Logger != nil {
+				h.Logger.Warnw("UploadBlob: invalid nonce base64", "id", id, "error", decErr)
+			}
 			http.Error(w, "invalid nonce (base64)", http.StatusBadRequest)
 			return
 		}
@@ -202,21 +232,33 @@ func (h *ItemHandler) UploadBlob(w http.ResponseWriter, r *http.Request) {
 		defer nonceFile.Close()
 		nb, readErr := io.ReadAll(nonceFile)
 		if readErr != nil {
+			if h.Logger != nil {
+				h.Logger.Warnw("UploadBlob: failed to read nonce file", "id", id, "error", readErr)
+			}
 			http.Error(w, "failed to read nonce", http.StatusBadRequest)
 			return
 		}
 		nonceBytes = nb
 	} else {
+		if h.Logger != nil {
+			h.Logger.Warnw("UploadBlob: missing nonce", "id", id)
+		}
 		http.Error(w, "missing nonce", http.StatusBadRequest)
 		return
 	}
 	if len(nonceBytes) == 0 {
+		if h.Logger != nil {
+			h.Logger.Warnw("UploadBlob: empty nonce", "id", id)
+		}
 		http.Error(w, "empty nonce", http.StatusBadRequest)
 		return
 	}
 
 	created, err := h.ItemService.SaveBlob(r.Context(), id, cipherBytes, nonceBytes)
 	if err != nil {
+		if h.Logger != nil {
+			h.Logger.Errorw("UploadBlob: service error", "id", id, "error", err)
+		}
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

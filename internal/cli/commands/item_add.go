@@ -17,7 +17,7 @@ func (itemAddCmd) Description() string {
 func (itemAddCmd) Usage() string { return "item-add <name> [<login> [<password>]]" }
 
 func (itemAddCmd) Run(cfg *config.Config, args []string) error { // cfg зарезервирован на будущее
-	if len(args) < 1 || len(args) > 3 {
+	if len(args) < 1 || len(args) > 2 && len(args) != 3 {
 		return ErrUsage
 	}
 	name := args[0]
@@ -53,8 +53,7 @@ func (itemAddCmd) Run(cfg *config.Config, args []string) error { // cfg заре
 	if passPtr != nil {
 		fmt.Println("  password: <set>")
 	}
-
-	// Синхронизация с сервером
+	// Синхронизация с сервером (поля item)
 	fmt.Println("→ Синхронизация с сервером...")
 	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, true, nil)
 	if syncErr != nil {
