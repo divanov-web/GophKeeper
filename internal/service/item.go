@@ -12,12 +12,21 @@ import (
 
 // ItemService инкапсулирует бизнес-логику работы с Item.
 type ItemService struct {
-	repo repo.ItemRepository
+	repo     repo.ItemRepository
+	blobRepo repo.BlobRepository
 }
 
 // NewItemService создаёт сервис Item.
-func NewItemService(r repo.ItemRepository) *ItemService {
-	return &ItemService{repo: r}
+func NewItemService(r repo.ItemRepository, br repo.BlobRepository) *ItemService {
+	return &ItemService{repo: r, blobRepo: br}
+}
+
+// SaveBlob сохраняет блоб идемпотентно. Возвращает created=true, если блоб был создан.
+func (s *ItemService) SaveBlob(ctx context.Context, id string, cipher, nonce []byte) (bool, error) {
+	if s.blobRepo == nil {
+		return false, errors.New("blob repository not configured")
+	}
+	return s.blobRepo.CreateIfAbsent(ctx, id, cipher, nonce)
 }
 
 // SyncChange описывает минимальную модель изменения элемента для сервиса.

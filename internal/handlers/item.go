@@ -4,7 +4,9 @@ import (
 	"GophKeeper/internal/config"
 	"GophKeeper/internal/middleware"
 	"GophKeeper/internal/service"
+	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
@@ -147,16 +149,87 @@ func (h *ItemHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// UploadBlob — заглушка загрузки бинарного содержимого.
+// UploadBlob загрузка файла blob
 func (h *ItemHandler) UploadBlob(w http.ResponseWriter, r *http.Request) {
 	if _, ok := middleware.GetUserIDFromContext(r.Context()); !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
+	// Лимит общего тела запроса
+	maxBody := int64(h.Config.BlobMaxSizeMB)*1024*1024 + 1*1024*1024
+	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+
+	// Парсим multipart/form-data
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "invalid multipart form", http.StatusBadRequest)
+		return
+	}
+
+	id := r.FormValue("id")
+	if id == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+
+	// Читаем cipher как файл
+	cipherFile, _, err := r.FormFile("cipher")
+	if err != nil {
+		http.Error(w, "missing cipher file", http.StatusBadRequest)
+		return
+	}
+	defer cipherFile.Close()
+	cipherBytes, err := io.ReadAll(cipherFile)
+	if err != nil {
+		http.Error(w, "failed to read cipher", http.StatusBadRequest)
+		return
+	}
+	maxCipher := int64(h.Config.BlobMaxSizeMB) * 1024 * 1024
+	if int64(len(cipherBytes)) > maxCipher {
+		http.Error(w, "payload too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	var nonceBytes []byte
+	if nonceStr := r.FormValue("nonce"); nonceStr != "" {
+		nb, decErr := base64.StdEncoding.DecodeString(nonceStr)
+		if decErr != nil {
+			http.Error(w, "invalid nonce (base64)", http.StatusBadRequest)
+			return
+		}
+		nonceBytes = nb
+	} else if nonceFile, _, ferr := r.FormFile("nonce"); ferr == nil {
+		defer nonceFile.Close()
+		nb, readErr := io.ReadAll(nonceFile)
+		if readErr != nil {
+			http.Error(w, "failed to read nonce", http.StatusBadRequest)
+			return
+		}
+		nonceBytes = nb
+	} else {
+		http.Error(w, "missing nonce", http.StatusBadRequest)
+		return
+	}
+	if len(nonceBytes) == 0 {
+		http.Error(w, "empty nonce", http.StatusBadRequest)
+		return
+	}
+
+	created, err := h.ItemService.SaveBlob(r.Context(), id, cipherBytes, nonceBytes)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	if created {
+		w.WriteHeader(http.StatusCreated)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"result": "blob upload stub",
+		"id":      id,
+		"created": created,
+		"size":    len(cipherBytes),
 	})
 }

@@ -16,14 +16,15 @@ type Config struct {
 	AuthSecret  string `env:"AUTH_SECRET"`
 
 	// Shared settings
-	BaseURL     string `env:"BASE_URL"`
-	EnableHTTPS bool   `env:"ENABLE_HTTPS"`
+	BaseURL       string `env:"BASE_URL"`
+	EnableHTTPS   bool   `env:"ENABLE_HTTPS"`
+	BlobMaxSizeMB int    `env:"BLOB_MAX_MB"` // максимальный размер загружаемого блоба (МБ)
 
 	// Client-side settings
 	ServerURL    string `env:"-"`
 	ClientDBPath string `env:"CLIENT_DB_PATH"`
 	TokenFile    string `env:"TOKEN_FILE"`
-	Version      bool   `env:"-"` // show client version and exit (flag only)
+	Version      bool   `env:"-"`
 }
 
 func NewConfig() *Config {
@@ -39,6 +40,7 @@ func NewConfig() *Config {
 	// Shared/client flags
 	flag.StringVar(&cfg.BaseURL, "base-url", cfg.BaseURL, "base URL of the GophKeeper server (may be host:port or full URL)")
 	flag.BoolVar(&cfg.EnableHTTPS, "https", cfg.EnableHTTPS, "enable HTTPS (client: prefer https scheme for BaseURL)")
+	flag.IntVar(&cfg.BlobMaxSizeMB, "blob-max-mb", cfg.BlobMaxSizeMB, "max blob upload size in megabytes (server)")
 	// Client flags
 	flag.StringVar(&cfg.ClientDBPath, "client-db", cfg.ClientDBPath, "path to client SQLite DB")
 	flag.StringVar(&cfg.TokenFile, "token-file", cfg.TokenFile, "path to auth token file (client)")
@@ -49,6 +51,9 @@ func NewConfig() *Config {
 	// Defaults
 	if cfg.AuthSecret == "" {
 		cfg.AuthSecret = "dev-secret-key"
+	}
+	if cfg.BlobMaxSizeMB <= 0 {
+		cfg.BlobMaxSizeMB = 50 // 50 MB by default
 	}
 	// validate BaseURL: must be in "address:port" (no scheme, no path). Otherwise, use default.
 	hostPortRe := regexp.MustCompile(`^[A-Za-z0-9\.\-]+:\d{1,5}$`)
