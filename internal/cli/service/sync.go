@@ -6,6 +6,7 @@ import (
 	crepo "GophKeeper/internal/cli/repo"
 	fsrepo "GophKeeper/internal/cli/repo/fs"
 	"GophKeeper/internal/config"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -164,7 +165,7 @@ func SyncItemByName(cfg *config.Config, r crepo.ItemRepository, name string, isN
 	if err != nil {
 		return false, 0, "", err
 	}
-	applied, newVer, serverVer, conflicts, syncErr := SyncItemToServer(cfg, *it, isNew, resolve)
+	applied, newVer, _, conflicts, syncErr := SyncItemToServer(cfg, *it, isNew, resolve)
 	if syncErr != nil {
 		return false, 0, conflicts, syncErr
 	}
@@ -177,11 +178,111 @@ func SyncItemByName(cfg *config.Config, r crepo.ItemRepository, name string, isN
 		}
 		return applied, newVer, conflicts, nil
 	}
-	// Если не применено и запрошено resolve=server — считаем, что пользователь выбрал серверную версию.
-	// Тогда, если сервер прислал свою версию — зафиксируем её локально, чтобы следующий запрос не конфликтовал.
-	if resolve != nil && *resolve == "server" && serverVer > 0 {
-		if err := r.SetServerVersion(it.ID, serverVer); err != nil {
-			return false, 0, conflicts, fmt.Errorf("failed to persist server version locally: %w", err)
+	// Если не применено и запрошено resolve=server — применяем полный server_item (если пришёл) и выравниваем версию
+	if resolve != nil && *resolve == "server" && conflicts != "" {
+		var confs []conflictDTO
+		if err := json.Unmarshal([]byte(conflicts), &confs); err == nil {
+			// Соберём blob_id для последующей догрузки (если локально отсутствуют)
+			pendingBlobIDs := make(map[string]struct{})
+			for _, c := range confs {
+				if c.ServerItem == nil {
+					continue
+				}
+				// построим client model.Item из server_item
+				sit := c.ServerItem
+				// обязательные поля
+				sid, _ := sit["id"].(string)
+				sname, _ := sit["name"].(string)
+				sfile, _ := sit["file_name"].(string)
+				// версия
+				var sver int64
+				switch v := sit["version"].(type) {
+				case float64:
+					sver = int64(v)
+				case int64:
+					sver = v
+				case json.Number:
+					if iv, err := v.Int64(); err == nil {
+						sver = iv
+					}
+				}
+				// updated_at
+				updUnix := time.Now().Unix()
+				if us, ok := sit["updated_at"].(string); ok {
+					if t, err := time.Parse(time.RFC3339, us); err == nil {
+						updUnix = t.Unix()
+					}
+				}
+				// blob_id
+				blobID := ""
+				if braw, ok := sit["blob_id"]; ok && braw != nil {
+					switch bv := braw.(type) {
+					case string:
+						blobID = bv
+					case *string:
+						if bv != nil {
+							blobID = *bv
+						}
+					}
+				}
+				// шифр-поля: сервер отдаёт []byte как base64-строки в JSON; поддержим также []byte на всякий случай
+				toBytes := func(m map[string]any, key string) []byte {
+					if val, ok := m[key]; ok && val != nil {
+						switch vv := val.(type) {
+						case string:
+							// base64 → []byte
+							b, err := base64.StdEncoding.DecodeString(vv)
+							if err == nil {
+								return b
+							}
+						case []byte:
+							return vv
+						}
+					}
+					return nil
+				}
+				itm := model.Item{
+					ID:             sid,
+					Name:           sname,
+					CreatedAt:      updUnix,
+					UpdatedAt:      updUnix,
+					Version:        sver,
+					Deleted:        false,
+					FileName:       sfile,
+					BlobID:         blobID,
+					LoginCipher:    toBytes(sit, "login_cipher"),
+					LoginNonce:     toBytes(sit, "login_nonce"),
+					PasswordCipher: toBytes(sit, "password_cipher"),
+					PasswordNonce:  toBytes(sit, "password_nonce"),
+					TextCipher:     toBytes(sit, "text_cipher"),
+					TextNonce:      toBytes(sit, "text_nonce"),
+					CardCipher:     toBytes(sit, "card_cipher"),
+					CardNonce:      toBytes(sit, "card_nonce"),
+				}
+				// deleted
+				if del, ok := sit["deleted"].(bool); ok {
+					itm.Deleted = del
+				}
+				// применяем локально
+				if sid != "" {
+					_ = r.UpsertFullFromServer(itm)
+					// выравниваем версию
+					_ = r.SetServerVersion(itm.ID, itm.Version)
+					// проверим blob_id
+					if blobID != "" {
+						if _, err := r.GetBlobByID(blobID); err != nil {
+							pendingBlobIDs[blobID] = struct{}{}
+						}
+					}
+				}
+			}
+			if len(pendingBlobIDs) > 0 {
+				ids := make([]string, 0, len(pendingBlobIDs))
+				for id := range pendingBlobIDs {
+					ids = append(ids, id)
+				}
+				QueueBlobsForDownload(ids)
+			}
 		}
 	}
 	return applied, newVer, conflicts, nil
@@ -238,4 +339,12 @@ func UploadBlobAsync(cfg *config.Config, r crepo.ItemRepository, blobID string) 
 		out <- UploadResult{BlobID: blobID, Created: created, Size: len(b.Cipher), Err: nil}
 	}()
 	return out
+}
+
+// QueueBlobsForDownload — заглушка очереди на последующую догрузку блобов по их id.
+// На этом шаге просто логически фиксируем список; сетевые вызовы будут добавлены позже.
+func QueueBlobsForDownload(ids []string) {
+	// TODO: реализовать очередь/задачи на скачивание блобов с сервера.
+	// Пока что ничего не делаем.
+	_ = ids
 }

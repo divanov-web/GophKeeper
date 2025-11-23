@@ -35,4 +35,7 @@ type ItemRepository interface {
 
 	// GetBlobByID возвращает блоб по идентификатору
 	GetBlobByID(id string) (*model.Blob, error)
+
+	// UpsertFullFromServer полностью вставляет/обновляет запись items по снимку с сервера
+	UpsertFullFromServer(it model.Item) error
 }

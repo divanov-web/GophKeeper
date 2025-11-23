@@ -175,7 +175,8 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 				res.Applied = append(res.Applied, AppliedResult{ID: ch.ID, NewVersion: newVer})
 				continue
 			case "server":
-				res.Conflicts = append(res.Conflicts, ConflictResult{ID: ch.ID, Reason: "version_conflict", ServerItem: minimalServerView(current)})
+				// На запрос resolve=server возвращаем полный снэпшот server_item
+				res.Conflicts = append(res.Conflicts, ConflictResult{ID: ch.ID, Reason: "version_conflict", ServerItem: fullServerView(current)})
 				continue
 			}
 		}
@@ -198,7 +199,7 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 			continue
 		}
 
-		// Иначе — конфликт без авторазрешения
+		// Иначе — конфликт без авторазрешения, отдаём минимальный вид
 		res.Conflicts = append(res.Conflicts, ConflictResult{ID: ch.ID, Reason: "version_conflict", ServerItem: minimalServerView(current)})
 	}
 
@@ -238,6 +239,34 @@ func minimalServerView(it *model.Item) map[string]any {
 		"name":       it.Name,
 		"file_name":  it.FileName,
 		"blob_id":    blobID,
+	}
+}
+
+// fullServerView возвращает полный снэпшот item, включая все шифрованные поля
+func fullServerView(it *model.Item) map[string]any {
+	var blobID *string
+	if it.BlobID != nil {
+		s := *it.BlobID
+		if s != "" {
+			blobID = &s
+		}
+	}
+	return map[string]any{
+		"id":              it.ID,
+		"version":         it.Version,
+		"deleted":         it.Deleted,
+		"updated_at":      it.UpdatedAt.UTC().Format(time.RFC3339),
+		"name":            it.Name,
+		"file_name":       it.FileName,
+		"blob_id":         blobID,
+		"login_cipher":    it.LoginCipher,
+		"login_nonce":     it.LoginNonce,
+		"password_cipher": it.PasswordCipher,
+		"password_nonce":  it.PasswordNonce,
+		"text_cipher":     it.TextCipher,
+		"text_nonce":      it.TextNonce,
+		"card_cipher":     it.CardCipher,
+		"card_nonce":      it.CardNonce,
 	}
 }
 

@@ -288,3 +288,85 @@ func (r *ItemRepositorySQLite) GetBlobByID(id string) (*model.Blob, error) {
 	}
 	return &b, nil
 }
+
+// UpsertFullFromServer полностью вставляет/обновляет запись items по снимку с сервера
+func (r *ItemRepositorySQLite) UpsertFullFromServer(it model.Item) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Проверим существование по id
+	var exists int
+	if err := tx.QueryRow(`SELECT 1 FROM items WHERE id = ?`, it.ID).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// вставка
+			_, ierr := tx.Exec(`INSERT INTO items(
+                id, name, created_at, updated_at, version, deleted,
+                file_name, blob_id,
+                login_cipher, login_nonce,
+                password_cipher, password_nonce,
+                text_cipher, text_nonce,
+                card_cipher, card_nonce
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				it.ID, it.Name, it.CreatedAt, it.UpdatedAt, it.Version, boolToInt(it.Deleted),
+				it.FileName, nullIfEmpty(it.BlobID),
+				it.LoginCipher, it.LoginNonce,
+				it.PasswordCipher, it.PasswordNonce,
+				it.TextCipher, it.TextNonce,
+				it.CardCipher, it.CardNonce,
+			)
+			if ierr != nil {
+				return ierr
+			}
+		} else {
+			return err
+		}
+	} else {
+		// обновление
+		_, uerr := tx.Exec(`UPDATE items SET
+            name = ?,
+            created_at = ?,
+            updated_at = ?,
+            version = ?,
+            deleted = ?,
+            file_name = ?,
+            blob_id = ?,
+            login_cipher = ?, login_nonce = ?,
+            password_cipher = ?, password_nonce = ?,
+            text_cipher = ?, text_nonce = ?,
+            card_cipher = ?, card_nonce = ?
+            WHERE id = ?`,
+			it.Name,
+			it.CreatedAt,
+			it.UpdatedAt,
+			it.Version,
+			boolToInt(it.Deleted),
+			it.FileName,
+			nullIfEmpty(it.BlobID),
+			it.LoginCipher, it.LoginNonce,
+			it.PasswordCipher, it.PasswordNonce,
+			it.TextCipher, it.TextNonce,
+			it.CardCipher, it.CardNonce,
+			it.ID,
+		)
+		if uerr != nil {
+			return uerr
+		}
+	}
+	return tx.Commit()
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
