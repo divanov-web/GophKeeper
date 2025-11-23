@@ -65,6 +65,7 @@ bin/gkcli.exe --version
 - `bin/gkcli.exe items` - показать все записи
 - `bin/gkcli.exe item-add <name> [<login> [<password>]]` - создать запись, при желании сразу добавить логин и пароль (оба параметра необязательные)
 - `bin/gkcli.exe item-edit [--resolve=client|server] <name> <type> <value> [<value2> <value3> <value4>]` - отредактировать/добавить поле в записи `<name>`. Где `<type>` одно из: `login|password|text|card|file`
+  - Если при синхронизации возникнет конфликт версий и флаг `--resolve` не указан, CLI предложит интерактивный выбор: `client|server|cancel` и выполнит повторную синхронизацию согласно выбору.
 - `bin/gkcli.exe item-get <name>` - показать запись по `<name>`
 
 ### Примеры item-add
@@ -77,6 +78,8 @@ bin/gkcli.exe --version
 - Карта  `bin\gkcli.exe item-edit myItem card <number> <card_holder> <exp> <cvc>`
   - `bin\gkcli.exe item-edit myItem card "4111 1111 1111 1111" "JOHN DOE" "12/25" "123"`
 - Файл: `bin/gkcli.exe item-edit myItem file C:\path\to\document.pdf`
+ - Пример интерактивного разрешения конфликта (без `--resolve`):
+   - CLI выведет: `Выберите действие [client|server|cancel]:` и выполнит повторный `sync` с выбранной стратегией.
 
 ## server API
 - `POST /api/user/register` - регистрация `{login, password}` → 201/400

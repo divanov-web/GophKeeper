@@ -1,9 +1,12 @@
 package commands
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"GophKeeper/internal/cli/bootstrap"
 	"GophKeeper/internal/cli/service"
@@ -94,21 +97,51 @@ func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зар�
 	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, created, resolvePtr)
 	if syncErr != nil {
 		fmt.Printf("× Ошибка отправки: %v\n", syncErr)
-		return nil
-	}
-	if applied {
+	} else if applied {
 		fmt.Printf("✓ Синхронизировано. Новая версия: %d\n", newVer)
-		return nil
-	}
-	if conflicts != "" {
-		fmt.Printf("! Конфликт на сервере: %s\n", conflicts)
-		if resolvePtr != nil && *resolvePtr == "server" {
-			// Мы привели локальную версию к серверной, чтобы следующий запрос не конфликтовал
-			fmt.Println("• Локальная версия выровнена с серверной (resolve=server)")
+	} else if conflicts != "" {
+		// Если пользователь явно не указал --resolve, предложим интерактивный выбор
+		if resolvePtr == nil {
+			fmt.Printf("! Конфликт на сервере: %s\n", conflicts)
+			reader := bufio.NewReader(os.Stdin)
+			for {
+				fmt.Print("Выберите действие [client|server|cancel]: ")
+				line, _ := reader.ReadString('\n')
+				choice := strings.TrimSpace(strings.ToLower(line))
+				if choice == "client" || choice == "server" {
+					ch := choice
+					fmt.Printf("→ Повторная синхронизация (resolve=%s)...\n", ch)
+					applied2, newVer2, conflicts2, syncErr2 := service.SyncItemByName(cfg, repo, name, created, &ch)
+					if syncErr2 != nil {
+						fmt.Printf("× Ошибка отправки: %v\n", syncErr2)
+					} else if applied2 {
+						fmt.Printf("✓ Синхронизировано. Новая версия: %d\n", newVer2)
+					} else if conflicts2 != "" {
+						fmt.Printf("! Конфликт на сервере: %s\n", conflicts2)
+						if ch == "server" {
+							fmt.Println("• Локальная версия выровнена с серверной (resolve=server)")
+						}
+					} else {
+						fmt.Println("• Синхронизация завершена: изменений не применено")
+					}
+					break
+				}
+				if choice == "cancel" || choice == "c" {
+					fmt.Println("• Отменено пользователем")
+					break
+				}
+				fmt.Println("Некорректный выбор. Введите client, server или cancel.")
+			}
+		} else {
+			// --resolve уже задан
+			fmt.Printf("! Конфликт на сервере: %s\n", conflicts)
+			if *resolvePtr == "server" {
+				fmt.Println("• Локальная версия выровнена с серверной (resolve=server)")
+			}
 		}
-		return nil
+	} else {
+		fmt.Println("• Синхронизация завершена: изменений не применено")
 	}
-	fmt.Println("• Синхронизация завершена: изменений не применено")
 
 	// Если запускалась параллельная загрузка файла — дождёмся результата и выведем сообщение
 	if uploadCh != nil {
