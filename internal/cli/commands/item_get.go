@@ -31,17 +31,17 @@ func (itemGetCmd) Run(cfg *config.Config, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("id:        %s\n", it.ID)
-	fmt.Printf("name:      %s\n", it.Name)
-	fmt.Printf("created:   %d\n", it.CreatedAt)
-	fmt.Printf("updated:   %d\n", it.UpdatedAt)
-	fmt.Printf("version:   %d\n", it.Version)
-	fmt.Printf("deleted:   %t\n", it.Deleted)
-	fmt.Printf("login:     %s\n", it.Login)
-	fmt.Printf("password:  %s\n", it.Password)
-	fmt.Printf("text:      %s\n", it.Text)
-	fmt.Printf("card:      %s\n", it.Card)
-	fmt.Printf("file:      %s\n", it.FileName)
+	fmt.Fprintf(Out, "id:        %s\n", it.ID)
+	fmt.Fprintf(Out, "name:      %s\n", it.Name)
+	fmt.Fprintf(Out, "created:   %d\n", it.CreatedAt)
+	fmt.Fprintf(Out, "updated:   %d\n", it.UpdatedAt)
+	fmt.Fprintf(Out, "version:   %d\n", it.Version)
+	fmt.Fprintf(Out, "deleted:   %t\n", it.Deleted)
+	fmt.Fprintf(Out, "login:     %s\n", it.Login)
+	fmt.Fprintf(Out, "password:  %s\n", it.Password)
+	fmt.Fprintf(Out, "text:      %s\n", it.Text)
+	fmt.Fprintf(Out, "card:      %s\n", it.Card)
+	fmt.Fprintf(Out, "file:      %s\n", it.FileName)
 	return nil
 }
 

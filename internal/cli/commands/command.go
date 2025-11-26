@@ -4,6 +4,8 @@ import (
 	"GophKeeper/internal/config"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"sort"
 	"strings"
 )
@@ -25,6 +27,9 @@ type Command interface {
 
 // registry holds available commands by name.
 var registry = map[string]Command{}
+
+// Out — общий writer для вывода CLI. По умолчанию os.Stdout, но в тестах может переназначаться.
+var Out io.Writer = os.Stdout
 
 // RegisterCmd adds a command to the registry. Should be called from init() of each command.
 func RegisterCmd(cmd Command) {

@@ -54,7 +54,7 @@ func (registerCmd) Run(cfg *config.Config, args []string) error {
 		if err := st.Migrate(); err != nil {
 			return fmt.Errorf("migrate user db: %w", err)
 		}
-		fmt.Println("Registered successfully")
+		fmt.Fprintln(Out, "Registered successfully")
 		return nil
 	}
 	if resp.StatusCode == http.StatusConflict {

@@ -72,13 +72,13 @@ func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зар�
 	}
 
 	if created {
-		fmt.Println("Created:")
+		fmt.Fprintln(Out, "Created:")
 	} else {
-		fmt.Println("Updated:")
+		fmt.Fprintln(Out, "Updated:")
 	}
-	fmt.Printf("  id:   %s\n", id)
-	fmt.Printf("  name: %s\n", name)
-	fmt.Printf("  %s: <set>\n", fieldType)
+	fmt.Fprintf(Out, "  id:   %s\n", id)
+	fmt.Fprintf(Out, "  name: %s\n", name)
+	fmt.Fprintf(Out, "  %s: <set>\n", fieldType)
 
 	// Если редактируем файл — запускаем параллельную загрузку блоба на сервер
 	var uploadCh <-chan service.UploadResult
@@ -86,73 +86,73 @@ func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зар�
 		// Получим текущий item, чтобы узнать blob_id
 		it, gerr := repo.GetItemByName(name)
 		if gerr != nil {
-			fmt.Printf("× Не удалось получить запись для загрузки файла: %v\n", gerr)
+			fmt.Fprintf(Out, "× Не удалось получить запись для загрузки файла: %v\n", gerr)
 		} else if it.BlobID != "" {
 			uploadCh = service.UploadBlobAsync(cfg, repo, it.BlobID)
 		}
 	}
 
 	// Синхронизация с сервером
-	fmt.Println("→ Синхронизация с сервером (/api/items/sync)...")
+	fmt.Fprintln(Out, "→ Синхронизация с сервером (/api/items/sync)...")
 	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, created, resolvePtr)
 	if syncErr != nil {
-		fmt.Printf("× Ошибка отправки: %v\n", syncErr)
+		fmt.Fprintf(Out, "× Ошибка отправки: %v\n", syncErr)
 	} else if applied {
-		fmt.Printf("✓ Синхронизировано. Новая версия: %d\n", newVer)
+		fmt.Fprintf(Out, "✓ Синхронизировано. Новая версия: %d\n", newVer)
 	} else if conflicts != "" {
 		// Если пользователь явно не указал --resolve, предложим интерактивный выбор
 		if resolvePtr == nil {
-			fmt.Printf("! Конфликт на сервере: %s\n", conflicts)
+			fmt.Fprintf(Out, "! Конфликт на сервере: %s\n", conflicts)
 			reader := bufio.NewReader(os.Stdin)
 			for {
-				fmt.Print("Выберите действие [client|server|cancel]: ")
+				fmt.Fprint(Out, "Выберите действие [client|server|cancel]: ")
 				line, _ := reader.ReadString('\n')
 				choice := strings.TrimSpace(strings.ToLower(line))
 				if choice == "client" || choice == "server" {
 					ch := choice
-					fmt.Printf("→ Повторная синхронизация (resolve=%s)...\n", ch)
+					fmt.Fprintf(Out, "→ Повторная синхронизация (resolve=%s)...\n", ch)
 					applied2, newVer2, conflicts2, syncErr2 := service.SyncItemByName(cfg, repo, name, created, &ch)
 					if syncErr2 != nil {
-						fmt.Printf("× Ошибка отправки: %v\n", syncErr2)
+						fmt.Fprintf(Out, "× Ошибка отправки: %v\n", syncErr2)
 					} else if applied2 {
-						fmt.Printf("✓ Синхронизировано. Новая версия: %d\n", newVer2)
+						fmt.Fprintf(Out, "✓ Синхронизировано. Новая версия: %d\n", newVer2)
 					} else if conflicts2 != "" {
-						fmt.Printf("! Конфликт на сервере: %s\n", conflicts2)
+						fmt.Fprintf(Out, "! Конфликт на сервере: %s\n", conflicts2)
 						if ch == "server" {
-							fmt.Println("• Локальная версия выровнена с серверной (resolve=server)")
+							fmt.Fprintln(Out, "• Локальная версия выровнена с серверной (resolve=server)")
 						}
 					} else {
-						fmt.Println("• Синхронизация завершена: изменений не применено")
+						fmt.Fprintln(Out, "• Синхронизация завершена: изменений не применено")
 					}
 					break
 				}
 				if choice == "cancel" || choice == "c" {
-					fmt.Println("• Отменено пользователем")
+					fmt.Fprintln(Out, "• Отменено пользователем")
 					break
 				}
-				fmt.Println("Некорректный выбор. Введите client, server или cancel.")
+				fmt.Fprintln(Out, "Некорректный выбор. Введите client, server или cancel.")
 			}
 		} else {
 			// --resolve уже задан
-			fmt.Printf("! Конфликт на сервере: %s\n", conflicts)
+			fmt.Fprintf(Out, "! Конфликт на сервере: %s\n", conflicts)
 			if *resolvePtr == "server" {
-				fmt.Println("• Локальная версия выровнена с серверной (resolve=server)")
+				fmt.Fprintln(Out, "• Локальная версия выровнена с серверной (resolve=server)")
 			}
 		}
 	} else {
-		fmt.Println("• Синхронизация завершена: изменений не применено")
+		fmt.Fprintln(Out, "• Синхронизация завершена: изменений не применено")
 	}
 
 	// Если запускалась параллельная загрузка файла — дождёмся результата и выведем сообщение
 	if uploadCh != nil {
 		res := <-uploadCh
 		if res.Err != nil {
-			fmt.Printf("× Ошибка загрузки файла: %v\n", res.Err)
+			fmt.Fprintf(Out, "× Ошибка загрузки файла: %v\n", res.Err)
 		} else {
 			if res.Created {
-				fmt.Printf("✓ Файл загружен (blob_id=%s, size=%d байт)\n", res.BlobID, res.Size)
+				fmt.Fprintf(Out, "✓ Файл загружен (blob_id=%s, size=%d байт)\n", res.BlobID, res.Size)
 			} else {
-				fmt.Printf("✓ Файл уже был загружен ранее (blob_id=%s, size=%d байт)\n", res.BlobID, res.Size)
+				fmt.Fprintf(Out, "✓ Файл уже был загружен ранее (blob_id=%s, size=%d байт)\n", res.BlobID, res.Size)
 			}
 		}
 	}

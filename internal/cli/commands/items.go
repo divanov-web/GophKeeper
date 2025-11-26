@@ -31,7 +31,7 @@ func (itemsCmd) Run(cfg *config.Config, args []string) error {
 		return err
 	}
 	if len(list) == 0 {
-		fmt.Println("Нет записей")
+		fmt.Fprintln(Out, "Нет записей")
 		return nil
 	}
 	for _, it := range list {
@@ -39,9 +39,9 @@ func (itemsCmd) Run(cfg *config.Config, args []string) error {
 		if it.Deleted {
 			del = " (deleted)"
 		}
-		fmt.Printf("- %s  name=%s  ver=%d%s\n", it.ID, it.Name, it.Version, del)
+		fmt.Fprintf(Out, "- %s  name=%s  ver=%d%s\n", it.ID, it.Name, it.Version, del)
 	}
-	fmt.Printf("Всего: %d\n", len(list))
+	fmt.Fprintf(Out, "Всего: %d\n", len(list))
 	return nil
 }
 

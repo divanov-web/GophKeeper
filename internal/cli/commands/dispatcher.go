@@ -14,7 +14,7 @@ func Dispatch(cfg *config.Config, args []string) int {
 	// If user passed global --help after flags parsing, show global usage
 	for _, a := range os.Args[1:] {
 		if a == "--help" || a == "-h" {
-			fmt.Print(FormatGlobalUsage())
+			fmt.Fprint(Out, FormatGlobalUsage())
 			return 0
 		}
 	}
@@ -24,29 +24,29 @@ func Dispatch(cfg *config.Config, args []string) int {
 	}
 
 	if len(args) == 0 {
-		fmt.Print(FormatGlobalUsage())
+		fmt.Fprint(Out, FormatGlobalUsage())
 		return 2
 	}
 
 	name := strings.ToLower(args[0])
 	if name == "help" { // gkcli help [command]
 		if len(args) == 1 {
-			fmt.Print(FormatGlobalUsage())
+			fmt.Fprint(Out, FormatGlobalUsage())
 			return 0
 		}
 		if c, ok := Get(args[1]); ok {
-			fmt.Printf("Usage: %s\n", c.Usage())
+			fmt.Fprintf(Out, "Usage: %s\n", c.Usage())
 			return 0
 		}
-		fmt.Printf("Unknown command: %s\n\n", args[1])
-		fmt.Print(FormatGlobalUsage())
+		fmt.Fprintf(Out, "Unknown command: %s\n\n", args[1])
+		fmt.Fprint(Out, FormatGlobalUsage())
 		return 2
 	}
 
 	c, ok := Get(name)
 	if !ok {
-		fmt.Printf("Unknown command: %s\n\n", name)
-		fmt.Print(FormatGlobalUsage())
+		fmt.Fprintf(Out, "Unknown command: %s\n\n", name)
+		fmt.Fprint(Out, FormatGlobalUsage())
 		return 2
 	}
 
@@ -55,10 +55,10 @@ func Dispatch(cfg *config.Config, args []string) int {
 	case nil:
 		return 0
 	case ErrUsage:
-		fmt.Printf("Usage: %s\n", c.Usage())
+		fmt.Fprintf(Out, "Usage: %s\n", c.Usage())
 		return 2
 	default:
-		fmt.Printf("%s error: %v\n", name, err)
+		fmt.Fprintf(Out, "%s error: %v\n", name, err)
 		return 1
 	}
 }

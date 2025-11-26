@@ -40,7 +40,7 @@ func (statusCmd) Run(cfg *config.Config, args []string) error {
 	if err := json.Unmarshal(body, &dr); err != nil {
 		return fmt.Errorf("decode: %w", err)
 	}
-	fmt.Println("Status:", dr.Result)
+	fmt.Fprintln(Out, "Status:", dr.Result)
 	return nil
 }
 

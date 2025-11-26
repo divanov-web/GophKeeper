@@ -23,6 +23,9 @@ func (itemAddCmd) Run(cfg *config.Config, args []string) error { // cfg заре
 	name := args[0]
 	var loginPtr, passPtr *string
 	if len(args) >= 2 {
+		if args[1] == "" {
+			return ErrUsage
+		}
 		login := args[1]
 		loginPtr = &login
 	}
@@ -44,31 +47,31 @@ func (itemAddCmd) Run(cfg *config.Config, args []string) error { // cfg заре
 	if err != nil {
 		return err
 	}
-	fmt.Println("Created:")
-	fmt.Printf("  id:   %s\n", id)
-	fmt.Printf("  name: %s\n", name)
+	fmt.Fprintln(Out, "Created:")
+	fmt.Fprintf(Out, "  id:   %s\n", id)
+	fmt.Fprintf(Out, "  name: %s\n", name)
 	if loginPtr != nil {
-		fmt.Println("  login: <set>")
+		fmt.Fprintln(Out, "  login: <set>")
 	}
 	if passPtr != nil {
-		fmt.Println("  password: <set>")
+		fmt.Fprintln(Out, "  password: <set>")
 	}
 	// Синхронизация с сервером (поля item)
-	fmt.Println("→ Синхронизация с сервером...")
+	fmt.Fprintln(Out, "→ Синхронизация с сервером...")
 	applied, newVer, conflicts, syncErr := service.SyncItemByName(cfg, repo, name, true, nil)
 	if syncErr != nil {
-		fmt.Printf("× Ошибка отправки: %v\n", syncErr)
+		fmt.Fprintf(Out, "× Ошибка отправки: %v\n", syncErr)
 		return nil
 	}
 	if applied {
-		fmt.Printf("✓ Синхронизировано. Новая версия: %d\n", newVer)
+		fmt.Fprintf(Out, "✓ Синхронизировано. Новая версия: %d\n", newVer)
 		return nil
 	}
 	if conflicts != "" {
-		fmt.Printf("! Конфликт на сервере: %s\n", conflicts)
+		fmt.Fprintf(Out, "! Конфликт на сервере: %s\n", conflicts)
 		return nil
 	}
-	fmt.Println("• Синхронизация завершена: изменений не применено")
+	fmt.Fprintln(Out, "• Синхронизация завершена: изменений не применено")
 	return nil
 }
 
