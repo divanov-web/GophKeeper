@@ -46,7 +46,7 @@ func (syncCmd) Run(cfg *config.Config, args []string) error {
 	}
 	defer done()
 
-	fmt.Println("→ Запуск синхронизации всей базы…")
+	fmt.Fprintln(Out, "→ Запуск синхронизации всей базы…")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -64,40 +64,40 @@ func (syncCmd) Run(cfg *config.Config, args []string) error {
 
 	res := <-resCh
 	if res.Err != nil {
-		fmt.Printf("× Ошибка синхронизации: %v\n", res.Err)
+		fmt.Fprintf(Out, "× Ошибка синхронизации: %v\n", res.Err)
 		return nil
 	}
 
 	if res.ConflictsJSON != "" {
 		if resolvePtr == nil {
-			fmt.Printf("! Конфликты на сервере: %s\n", res.ConflictsJSON)
+			fmt.Fprintf(Out, "! Конфликты на сервере: %s\n", res.ConflictsJSON)
 			reader := bufio.NewReader(os.Stdin)
 			for {
-				fmt.Print("Выберите действие [client|server|cancel]: ")
+				fmt.Fprint(Out, "Выберите действие [client|server|cancel]: ")
 				line, _ := reader.ReadString('\n')
 				choice := strings.TrimSpace(strings.ToLower(line))
 				if choice == "client" || choice == "server" {
 					ch := choice
-					fmt.Printf("→ Повторная синхронизация (resolve=%s)…\n", ch)
+					fmt.Fprintf(Out, "→ Повторная синхронизация (resolve=%s)…\n", ch)
 					res2 := service.RunSyncBatch(ctx, cfg, repo, service.BatchSyncOptions{
 						All:     *all,
 						Resolve: &ch,
 					})
 					if res2.Err != nil {
-						fmt.Printf("× Ошибка синхронизации: %v\n", res2.Err)
+						fmt.Fprintf(Out, "× Ошибка синхронизации: %v\n", res2.Err)
 						return nil
 					}
 					printBatchSummary(res2)
 					return nil
 				}
 				if choice == "cancel" || choice == "c" {
-					fmt.Println("• Отменено пользователем")
+					fmt.Fprintln(Out, "• Отменено пользователем")
 					return nil
 				}
-				fmt.Println("Некорректный выбор. Введите client, server или cancel.")
+				fmt.Fprintln(Out, "Некорректный выбор. Введите client, server или cancel.")
 			}
 		} else {
-			fmt.Printf("! Конфликты на сервере: %s\n", res.ConflictsJSON)
+			fmt.Fprintf(Out, "! Конфликты на сервере: %s\n", res.ConflictsJSON)
 		}
 	}
 
@@ -107,19 +107,19 @@ func (syncCmd) Run(cfg *config.Config, args []string) error {
 
 func printBatchSummary(res service.BatchSyncResult) {
 	if res.AppliedCount > 0 {
-		fmt.Printf("✓ Применено изменений: %d\n", res.AppliedCount)
+		fmt.Fprintf(Out, "✓ Применено изменений: %d\n", res.AppliedCount)
 	}
 	if res.ServerUpserts > 0 {
-		fmt.Printf("• Получено и сохранено записей с сервера: %d\n", res.ServerUpserts)
+		fmt.Fprintf(Out, "• Получено и сохранено записей с сервера: %d\n", res.ServerUpserts)
 	}
 	if len(res.QueuedBlobIDs) > 0 {
-		fmt.Printf("• Поставлено на догрузку blob'ов: %d\n", len(res.QueuedBlobIDs))
+		fmt.Fprintf(Out, "• Поставлено на догрузку blob'ов: %d\n", len(res.QueuedBlobIDs))
 	}
 	if res.ServerTime != "" {
-		fmt.Printf("• Метка сервера: %s\n", res.ServerTime)
+		fmt.Fprintf(Out, "• Метка сервера: %s\n", res.ServerTime)
 	}
 	if res.AppliedCount == 0 && res.ServerUpserts == 0 && res.ConflictsJSON == "" {
-		fmt.Println("• Синхронизация завершена: изменений не применено")
+		fmt.Fprintln(Out, "• Синхронизация завершена: изменений не применено")
 	}
 }
 
