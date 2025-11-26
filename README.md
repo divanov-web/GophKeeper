@@ -99,15 +99,6 @@ bin/gkcli.exe --version
 
 ## Тестирование
 Цель покрытия юнит‑тестами - 80%+ по пакетам сервера и клиента.
-Запуск тестов:
-```bash
-go test ./...
-```
-Отчёт покрытия:
-```bash
-go test ./... -coverprofile=coverage.out
-go tool cover -html=coverage.out -o coverage.html
-```
 
 ## Структура клиентской БД (SQLite)
 Таблица meta - метаданные

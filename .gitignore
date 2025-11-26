@@ -6,7 +6,7 @@
 *.dylib
 *.log
 *.tmp
-coverage*
+coverag*
 
 # Test binary, built with `go test -c`
 *.test
