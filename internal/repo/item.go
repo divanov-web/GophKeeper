@@ -22,6 +22,9 @@ type ItemRepository interface {
 	// UpdateWithVersion выполняет обновление c проверкой версии (OCC):
 	// WHERE id=? AND user_id=? AND version=?; увеличивает версию на 1 и возвращает новое значение версии.
 	UpdateWithVersion(ctx context.Context, userID int64, id string, expectedVersion int64, updates map[string]any) (int64, error)
+
+	// ListAll возвращает все элементы пользователя (для вычисления missing_items).
+	ListAll(ctx context.Context, userID int64) ([]model.Item, error)
 }
 
 type itemRepo struct {
@@ -85,4 +88,17 @@ func (r *itemRepo) UpdateWithVersion(ctx context.Context, userID int64, id strin
 		return 0, gorm.ErrRecordNotFound
 	}
 	return newVersion, nil
+}
+
+// ListAll возвращает все элементы пользователя.
+func (r *itemRepo) ListAll(ctx context.Context, userID int64) ([]model.Item, error) {
+	var items []model.Item
+	err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("updated_at asc").
+		Find(&items).Error
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
 }

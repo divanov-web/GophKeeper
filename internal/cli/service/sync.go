@@ -6,6 +6,7 @@ import (
 	crepo "GophKeeper/internal/cli/repo"
 	fsrepo "GophKeeper/internal/cli/repo/fs"
 	"GophKeeper/internal/config"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -32,8 +33,9 @@ type syncChange struct {
 }
 
 type syncRequest struct {
-	LastSyncAt string       `json:"last_sync_at,omitempty"`
-	Changes    []syncChange `json:"changes"`
+	LastSyncAt  string       `json:"last_sync_at,omitempty"`
+	Changes     []syncChange `json:"changes"`
+	WantMissing bool         `json:"want_missing,omitempty"`
 }
 
 type appliedDTO struct {
@@ -48,9 +50,11 @@ type conflictDTO struct {
 }
 
 type syncResponse struct {
-	Applied    []appliedDTO  `json:"applied"`
-	Conflicts  []conflictDTO `json:"conflicts"`
-	ServerTime string        `json:"server_time"`
+	Applied       []appliedDTO     `json:"applied"`
+	Conflicts     []conflictDTO    `json:"conflicts"`
+	ServerChanges []map[string]any `json:"server_changes"`
+	ServerTime    string           `json:"server_time"`
+	MissingItems  []map[string]any `json:"missing_items"`
 }
 
 // SyncItemToServer отправляет один item на сервер через /api/items/sync.
@@ -347,4 +351,336 @@ func QueueBlobsForDownload(ids []string) {
 	// TODO: реализовать очередь/задачи на скачивание блобов с сервера.
 	// Пока что ничего не делаем.
 	_ = ids
+}
+
+// BatchSyncOptions задаёт параметры пакетной синхронизации
+type BatchSyncOptions struct {
+	All     bool    // если true — использовать last_sync_at с эпохи
+	Resolve *string // опциональная стратегия для всех конфликтов: client|server
+}
+
+// BatchSyncResult результат пакетной синхронизации
+type BatchSyncResult struct {
+	AppliedCount  int
+	ServerUpserts int
+	ConflictsJSON string
+	QueuedBlobIDs []string
+	ServerTime    string
+	Err           error
+}
+
+// RunSyncBatch выполняет пакетную синхронизацию всех локальных записей с сервером.
+// Простой вариант: отправляем все локальные записи как changes; также указываем last_sync_at
+// (эпоха при opts.All или прочитанное из конфигурации пользователя), применяем server_changes локально.
+func RunSyncBatch(ctx context.Context, cfg *config.Config, r crepo.ItemRepository, opts BatchSyncOptions) BatchSyncResult {
+	// Загрузка токена
+	token, err := (fsrepo.AuthFSStore{}).Load()
+	if err != nil {
+		return BatchSyncResult{Err: fmt.Errorf("нет токена авторизации: %w", err)}
+	}
+	// Определим логин пользователя (для хранения last_sync_at в пользовательском конфиге)
+	login, lerr := (fsrepo.AuthFSStore{}).LoadLogin()
+	if lerr != nil {
+		return BatchSyncResult{Err: fmt.Errorf("нет активного пользователя: %w", lerr)}
+	}
+
+	// last_sync_at
+	lastSyncAt := ""
+	if opts.All {
+		lastSyncAt = "1970-01-01T00:00:00Z"
+	} else {
+		if v, err := fsrepo.LoadLastSyncAt(login); err == nil && v != "" {
+			lastSyncAt = v
+		} else {
+			lastSyncAt = "1970-01-01T00:00:00Z"
+		}
+	}
+
+	// Соберём локальные элементы для changes
+	items, err := r.ListItems()
+	if err != nil {
+		return BatchSyncResult{Err: err}
+	}
+	changes := make([]syncChange, 0, len(items))
+	for _, meta := range items {
+		// Берём полную запись (включая зашифрованные поля)
+		it, gerr := r.GetItemByName(meta.Name)
+		if gerr != nil {
+			// пропустим одну запись, но продолжим остальные
+			continue
+		}
+		ch := syncChange{ID: it.ID}
+		v := it.Version
+		ch.Version = &v
+		if opts.Resolve != nil && (*opts.Resolve == "client" || *opts.Resolve == "server") {
+			rv := *opts.Resolve
+			ch.Resolve = &rv
+		}
+		if it.Name != "" {
+			n := it.Name
+			ch.Name = &n
+		}
+		if it.FileName != "" {
+			fn := it.FileName
+			ch.FileName = &fn
+		}
+		if it.BlobID != "" {
+			bid := it.BlobID
+			ch.BlobID = &bid
+		}
+		if len(it.LoginCipher) > 0 {
+			ch.LoginCipher = it.LoginCipher
+		}
+		if len(it.LoginNonce) > 0 {
+			ch.LoginNonce = it.LoginNonce
+		}
+		if len(it.PasswordCipher) > 0 {
+			ch.PasswordCipher = it.PasswordCipher
+		}
+		if len(it.PasswordNonce) > 0 {
+			ch.PasswordNonce = it.PasswordNonce
+		}
+		if len(it.TextCipher) > 0 {
+			ch.TextCipher = it.TextCipher
+		}
+		if len(it.TextNonce) > 0 {
+			ch.TextNonce = it.TextNonce
+		}
+		if len(it.CardCipher) > 0 {
+			ch.CardCipher = it.CardCipher
+		}
+		if len(it.CardNonce) > 0 {
+			ch.CardNonce = it.CardNonce
+		}
+		changes = append(changes, ch)
+	}
+
+	payload := syncRequest{Changes: changes}
+	if lastSyncAt != "" {
+		payload.LastSyncAt = lastSyncAt
+	}
+	// Запросим у сервера записи, которых нет у клиента, только при полной синхронизации
+	payload.WantMissing = opts.All
+	url := cfg.ServerURL + "/api/items/sync"
+	resp, body, err := api.PostJSON(url, payload, token)
+	if err != nil {
+		return BatchSyncResult{Err: err}
+	}
+	if resp.StatusCode != 200 {
+		return BatchSyncResult{Err: fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))}
+	}
+	var sr syncResponse
+	if err := json.Unmarshal(body, &sr); err != nil {
+		return BatchSyncResult{Err: err}
+	}
+
+	res := BatchSyncResult{}
+	// Applied count
+	res.AppliedCount = len(sr.Applied)
+
+	// Обработка конфликтов
+	if len(sr.Conflicts) > 0 {
+		// Если resolve=server — применим полные server_item (если они присутствуют) локально
+		if opts.Resolve != nil && *opts.Resolve == "server" {
+			pending := map[string]struct{}{}
+			for _, c := range sr.Conflicts {
+				if c.ServerItem == nil {
+					continue
+				}
+				sit := c.ServerItem
+				sid, _ := sit["id"].(string)
+				sname, _ := sit["name"].(string)
+				sfile, _ := sit["file_name"].(string)
+				var sver int64
+				if v, ok := sit["version"]; ok {
+					switch vv := v.(type) {
+					case float64:
+						sver = int64(vv)
+					case int64:
+						sver = vv
+					case json.Number:
+						if iv, e := vv.Int64(); e == nil {
+							sver = iv
+						}
+					}
+				}
+				// updated_at
+				updUnix := time.Now().Unix()
+				if us, ok := sit["updated_at"].(string); ok {
+					if t, e := time.Parse(time.RFC3339, us); e == nil {
+						updUnix = t.Unix()
+					}
+				}
+				// blob_id
+				blobID := ""
+				if braw, ok := sit["blob_id"]; ok && braw != nil {
+					switch bv := braw.(type) {
+					case string:
+						blobID = bv
+					case *string:
+						if bv != nil {
+							blobID = *bv
+						}
+					}
+				}
+				// helper для []byte
+				toBytes := func(m map[string]any, key string) []byte {
+					if val, ok := m[key]; ok && val != nil {
+						switch vv := val.(type) {
+						case string:
+							if b, e := base64.StdEncoding.DecodeString(vv); e == nil {
+								return b
+							}
+						case []byte:
+							return vv
+						}
+					}
+					return nil
+				}
+				itm := model.Item{
+					ID:             sid,
+					Name:           sname,
+					CreatedAt:      updUnix,
+					UpdatedAt:      updUnix,
+					Version:        sver,
+					Deleted:        false,
+					FileName:       sfile,
+					BlobID:         blobID,
+					LoginCipher:    toBytes(sit, "login_cipher"),
+					LoginNonce:     toBytes(sit, "login_nonce"),
+					PasswordCipher: toBytes(sit, "password_cipher"),
+					PasswordNonce:  toBytes(sit, "password_nonce"),
+					TextCipher:     toBytes(sit, "text_cipher"),
+					TextNonce:      toBytes(sit, "text_nonce"),
+					CardCipher:     toBytes(sit, "card_cipher"),
+					CardNonce:      toBytes(sit, "card_nonce"),
+				}
+				if del, ok := sit["deleted"].(bool); ok {
+					itm.Deleted = del
+				}
+				if sid != "" {
+					_ = r.UpsertFullFromServer(itm)
+					_ = r.SetServerVersion(itm.ID, itm.Version)
+					if blobID != "" {
+						if _, e := r.GetBlobByID(blobID); e != nil {
+							pending[blobID] = struct{}{}
+						}
+					}
+				}
+			}
+			if len(pending) > 0 {
+				res.QueuedBlobIDs = make([]string, 0, len(pending))
+				for id := range pending {
+					res.QueuedBlobIDs = append(res.QueuedBlobIDs, id)
+				}
+				QueueBlobsForDownload(res.QueuedBlobIDs)
+			}
+		}
+		if b, e := json.Marshal(sr.Conflicts); e == nil {
+			res.ConflictsJSON = string(b)
+		}
+	}
+
+	// По ТЗ: server_changes с неполными данными НЕ сохраняем локально.
+
+	// Обработка missing_items (полные снимки записей, отсутствующих у клиента)
+	if len(sr.MissingItems) > 0 {
+		pending := map[string]struct{}{}
+		for _, sit := range sr.MissingItems {
+			sid, _ := sit["id"].(string)
+			sname, _ := sit["name"].(string)
+			sfile, _ := sit["file_name"].(string)
+			var sver int64
+			if v, ok := sit["version"]; ok {
+				switch vv := v.(type) {
+				case float64:
+					sver = int64(vv)
+				case int64:
+					sver = vv
+				case json.Number:
+					if iv, e := vv.Int64(); e == nil {
+						sver = iv
+					}
+				}
+			}
+			// updated_at
+			updUnix := time.Now().Unix()
+			if us, ok := sit["updated_at"].(string); ok {
+				if t, e := time.Parse(time.RFC3339, us); e == nil {
+					updUnix = t.Unix()
+				}
+			}
+			// blob_id
+			blobID := ""
+			if braw, ok := sit["blob_id"]; ok && braw != nil {
+				switch bv := braw.(type) {
+				case string:
+					blobID = bv
+				case *string:
+					if bv != nil {
+						blobID = *bv
+					}
+				}
+			}
+			// helper для []byte
+			toBytes := func(m map[string]any, key string) []byte {
+				if val, ok := m[key]; ok && val != nil {
+					switch vv := val.(type) {
+					case string:
+						if b, e := base64.StdEncoding.DecodeString(vv); e == nil {
+							return b
+						}
+					case []byte:
+						return vv
+					}
+				}
+				return nil
+			}
+			itm := model.Item{
+				ID:             sid,
+				Name:           sname,
+				CreatedAt:      updUnix,
+				UpdatedAt:      updUnix,
+				Version:        sver,
+				Deleted:        false,
+				FileName:       sfile,
+				BlobID:         blobID,
+				LoginCipher:    toBytes(sit, "login_cipher"),
+				LoginNonce:     toBytes(sit, "login_nonce"),
+				PasswordCipher: toBytes(sit, "password_cipher"),
+				PasswordNonce:  toBytes(sit, "password_nonce"),
+				TextCipher:     toBytes(sit, "text_cipher"),
+				TextNonce:      toBytes(sit, "text_nonce"),
+				CardCipher:     toBytes(sit, "card_cipher"),
+				CardNonce:      toBytes(sit, "card_nonce"),
+			}
+			if del, ok := sit["deleted"].(bool); ok {
+				itm.Deleted = del
+			}
+			if sid != "" {
+				_ = r.UpsertFullFromServer(itm)
+				_ = r.SetServerVersion(itm.ID, itm.Version)
+				if blobID != "" {
+					if _, e := r.GetBlobByID(blobID); e != nil {
+						pending[blobID] = struct{}{}
+					}
+				}
+				res.ServerUpserts++
+			}
+		}
+		if len(pending) > 0 {
+			res.QueuedBlobIDs = make([]string, 0, len(pending))
+			for id := range pending {
+				res.QueuedBlobIDs = append(res.QueuedBlobIDs, id)
+			}
+			QueueBlobsForDownload(res.QueuedBlobIDs)
+		}
+	}
+
+	// Сохраним server_time как last_sync_at в конфиг пользователя
+	if sr.ServerTime != "" {
+		_ = fsrepo.SaveLastSyncAt(login, sr.ServerTime)
+		res.ServerTime = sr.ServerTime
+	}
+	return res
 }

@@ -54,8 +54,9 @@ type SyncChange struct {
 
 // SyncRequest вход сервиса синхронизации.
 type SyncRequest struct {
-	LastSyncAt *time.Time
-	Changes    []SyncChange
+	LastSyncAt  *time.Time
+	Changes     []SyncChange
+	WantMissing bool
 }
 
 // SyncResult результат синхронизации.
@@ -64,6 +65,7 @@ type SyncResult struct {
 	Conflicts     []ConflictResult
 	ServerChanges []model.Item
 	ServerTime    time.Time
+	MissingItems  []model.Item
 }
 
 type AppliedResult struct {
@@ -84,6 +86,7 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 		Conflicts:     make([]ConflictResult, 0),
 		ServerChanges: []model.Item{},
 		ServerTime:    time.Now().UTC(),
+		MissingItems:  []model.Item{},
 	}
 
 	// Основной цикл по изменениям
@@ -211,6 +214,30 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 			s.logger.Errorw("Sync: get items since failed",
 				"user_id", userID,
 				"since", req.LastSyncAt.UTC().Format(time.RFC3339),
+				"error", err,
+			)
+		}
+	}
+
+	// Missing items: те, которых нет у клиента. Рассчитываем множество client IDs из req.Changes.
+	if req.WantMissing {
+		clientSet := make(map[string]struct{}, len(req.Changes))
+		for _, ch := range req.Changes {
+			if ch.ID != "" {
+				clientSet[ch.ID] = struct{}{}
+			}
+		}
+		items, err := s.repo.ListAll(ctx, userID)
+		if err == nil {
+			for i := range items {
+				it := items[i]
+				if _, ok := clientSet[it.ID]; !ok {
+					res.MissingItems = append(res.MissingItems, it)
+				}
+			}
+		} else {
+			s.logger.Errorw("Sync: list all items failed",
+				"user_id", userID,
 				"error", err,
 			)
 		}

@@ -37,6 +37,19 @@ func lastLoginPath() (string, error) {
 	return filepath.Join(dir, "last_login"), nil
 }
 
+func lastSyncAtPath(login string) (string, error) {
+	if login == "" {
+		return "", errors.New("empty login for last_sync_at")
+	}
+	dir, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	// Храним per-user, чтобы поддерживать несколько аккаунтов
+	safe := login
+	return filepath.Join(dir, "last_sync_at_"+safe), nil
+}
+
 // Save сохраняет auth‑токен в файл.
 func (AuthFSStore) Save(token string) error {
 	p, err := tokenPath()
@@ -97,6 +110,46 @@ func (AuthFSStore) LoadLogin() (string, error) {
 		return "", errors.New("no stored login")
 	}
 	// обрезаем завершающие переводы строки/пробелы
+	for len(b) > 0 {
+		c := b[len(b)-1]
+		if c == '\n' || c == '\r' || c == ' ' || c == '\t' {
+			b = b[:len(b)-1]
+			continue
+		}
+		break
+	}
+	return string(b), nil
+}
+
+// SaveLastSyncAt сохраняет значение last_sync_at (RFC3339) для указанного пользователя
+func SaveLastSyncAt(login, ts string) error {
+	if login == "" {
+		return errors.New("empty login")
+	}
+	p, err := lastSyncAtPath(login)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, []byte(ts), 0o600)
+}
+
+// LoadLastSyncAt читает last_sync_at для указанного пользователя
+func LoadLastSyncAt(login string) (string, error) {
+	if login == "" {
+		return "", errors.New("empty login")
+	}
+	p, err := lastSyncAtPath(login)
+	if err != nil {
+		return "", err
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return "", err
+	}
+	if len(b) == 0 {
+		return "", errors.New("empty last_sync_at file")
+	}
+	// trim trailing whitespace
 	for len(b) > 0 {
 		c := b[len(b)-1]
 		if c == '\n' || c == '\r' || c == ' ' || c == '\t' {
