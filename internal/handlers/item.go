@@ -27,9 +27,9 @@ func NewItemHandler(itemService *service.ItemService, logger *zap.SugaredLogger,
 
 // SyncRequest — минимальный контракт синхронизации (батч изменений).
 type SyncRequest struct {
-	LastSyncAt  string       `json:"last_sync_at,omitempty"`
-	Changes     []ItemChange `json:"changes"`
-	WantMissing bool         `json:"want_missing,omitempty"`
+	LastSyncAt string       `json:"last_sync_at,omitempty"`
+	Changes    []ItemChange `json:"changes"`
+	Resolve    *string      `json:"resolve,omitempty"`
 }
 
 // ItemChange — элемент изменения. Значения могут быть опциональными.
@@ -40,7 +40,6 @@ type ItemChange struct {
 	BlobID         *string `json:"blob_id,omitempty"`
 	Version        *int64  `json:"version,omitempty"`
 	Deleted        *bool   `json:"deleted,omitempty"`
-	Resolve        *string `json:"resolve,omitempty"` // "client" | "server"
 	LoginCipher    []byte  `json:"login_cipher,omitempty"`
 	LoginNonce     []byte  `json:"login_nonce,omitempty"`
 	PasswordCipher []byte  `json:"password_cipher,omitempty"`
@@ -68,7 +67,6 @@ type SyncResponse struct {
 	Conflicts     []ConflictDTO `json:"conflicts"`
 	ServerChanges []any         `json:"server_changes"`
 	ServerTime    string        `json:"server_time"`
-	MissingItems  []any         `json:"missing_items,omitempty"`
 }
 
 // Sync синхронизация item от клиента
@@ -97,14 +95,13 @@ func (h *ItemHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	svcReq := service.SyncRequest{LastSyncAt: sincePtr, Changes: make([]service.SyncChange, 0, len(req.Changes))}
-	// Параметры пакетной синхронизации
-	svcReq.WantMissing = req.WantMissing
+	// Стратегия разрешения на уровень батча (опционально)
+	svcReq.Resolve = req.Resolve
 	for _, ch := range req.Changes {
 		svcReq.Changes = append(svcReq.Changes, service.SyncChange{
 			ID:             ch.ID,
 			Version:        ch.Version,
 			Deleted:        ch.Deleted,
-			Resolve:        ch.Resolve,
 			Name:           ch.Name,
 			FileName:       ch.FileName,
 			BlobID:         ch.BlobID,
@@ -135,51 +132,33 @@ func (h *ItemHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	for _, c := range res.Conflicts {
 		conflicts = append(conflicts, ConflictDTO{ID: c.ID, Reason: c.Reason, ServerItem: c.ServerItem})
 	}
-	// server_changes пока отдаём как сырые объекты модели
+	// server_changes теперь всегда отдаются как ПОЛНЫЕ снимки записей
 	serverChanges := make([]any, 0, len(res.ServerChanges))
 	for _, it := range res.ServerChanges {
-		serverChanges = append(serverChanges, map[string]any{
-			"id":         it.ID,
-			"version":    it.Version,
-			"deleted":    it.Deleted,
-			"updated_at": it.UpdatedAt.UTC().Format(time.RFC3339),
-			"name":       it.Name,
-			"file_name":  it.FileName,
-			"blob_id":    it.BlobID,
-		})
-	}
-
-	// missing_items (полные снимки)
-	missing := make([]any, 0)
-	if len(res.MissingItems) > 0 {
-		missing = make([]any, 0, len(res.MissingItems))
-		for i := range res.MissingItems {
-			it := &res.MissingItems[i]
-			var blobID *string
-			if it.BlobID != nil {
-				s := *it.BlobID
-				if s != "" {
-					blobID = &s
-				}
+		var blobID *string
+		if it.BlobID != nil {
+			s := *it.BlobID
+			if s != "" {
+				blobID = &s
 			}
-			missing = append(missing, map[string]any{
-				"id":              it.ID,
-				"version":         it.Version,
-				"deleted":         it.Deleted,
-				"updated_at":      it.UpdatedAt.UTC().Format(time.RFC3339),
-				"name":            it.Name,
-				"file_name":       it.FileName,
-				"blob_id":         blobID,
-				"login_cipher":    it.LoginCipher,
-				"login_nonce":     it.LoginNonce,
-				"password_cipher": it.PasswordCipher,
-				"password_nonce":  it.PasswordNonce,
-				"text_cipher":     it.TextCipher,
-				"text_nonce":      it.TextNonce,
-				"card_cipher":     it.CardCipher,
-				"card_nonce":      it.CardNonce,
-			})
 		}
+		serverChanges = append(serverChanges, map[string]any{
+			"id":              it.ID,
+			"version":         it.Version,
+			"deleted":         it.Deleted,
+			"updated_at":      it.UpdatedAt.UTC().Format(time.RFC3339),
+			"name":            it.Name,
+			"file_name":       it.FileName,
+			"blob_id":         blobID,
+			"login_cipher":    it.LoginCipher,
+			"login_nonce":     it.LoginNonce,
+			"password_cipher": it.PasswordCipher,
+			"password_nonce":  it.PasswordNonce,
+			"text_cipher":     it.TextCipher,
+			"text_nonce":      it.TextNonce,
+			"card_cipher":     it.CardCipher,
+			"card_nonce":      it.CardNonce,
+		})
 	}
 
 	resp := SyncResponse{
@@ -187,7 +166,6 @@ func (h *ItemHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		Conflicts:     conflicts,
 		ServerChanges: serverChanges,
 		ServerTime:    res.ServerTime.UTC().Format(time.RFC3339),
-		MissingItems:  missing,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

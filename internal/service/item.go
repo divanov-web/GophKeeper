@@ -36,7 +36,6 @@ type SyncChange struct {
 	ID      string
 	Version *int64
 	Deleted *bool
-	Resolve *string // "client" | "server" (опционально)
 	// Поля для частичных обновлений
 	Name     *string
 	FileName *string
@@ -54,9 +53,9 @@ type SyncChange struct {
 
 // SyncRequest вход сервиса синхронизации.
 type SyncRequest struct {
-	LastSyncAt  *time.Time
-	Changes     []SyncChange
-	WantMissing bool
+	LastSyncAt *time.Time
+	Changes    []SyncChange
+	Resolve    *string // стратегия на весь батч: "client" | "server" (опционально)
 }
 
 // SyncResult результат синхронизации.
@@ -65,7 +64,6 @@ type SyncResult struct {
 	Conflicts     []ConflictResult
 	ServerChanges []model.Item
 	ServerTime    time.Time
-	MissingItems  []model.Item
 }
 
 type AppliedResult struct {
@@ -86,7 +84,6 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 		Conflicts:     make([]ConflictResult, 0),
 		ServerChanges: []model.Item{},
 		ServerTime:    time.Now().UTC(),
-		MissingItems:  []model.Item{},
 	}
 
 	// Основной цикл по изменениям
@@ -158,9 +155,9 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 		}
 
 		// Конфликт версий
-		// Если передан явный флаг разрешения
-		if ch.Resolve != nil {
-			switch *ch.Resolve {
+		// Если передан явный флаг разрешения на уровне батча
+		if req.Resolve != nil {
+			switch *req.Resolve {
 			case "client":
 				// Применяем поверх серверной версии, независимо от clientVer
 				updates := buildPatchFromChange(ch, current)
@@ -206,38 +203,21 @@ func (s *ItemService) Sync(ctx context.Context, userID int64, req SyncRequest) (
 		res.Conflicts = append(res.Conflicts, ConflictResult{ID: ch.ID, Reason: "version_conflict", ServerItem: minimalServerView(current)})
 	}
 
-	// Server changes since LastSyncAt
 	if req.LastSyncAt != nil {
-		if items, err := s.repo.GetItemsUpdatedSince(ctx, userID, *req.LastSyncAt); err == nil {
+		epoch := time.Unix(0, 0).UTC()
+		var items []model.Item
+		var err error
+		if req.LastSyncAt.UTC().Equal(epoch) {
+			items, err = s.repo.ListAll(ctx, userID)
+		} else {
+			items, err = s.repo.GetItemsUpdatedSince(ctx, userID, *req.LastSyncAt)
+		}
+		if err == nil {
 			res.ServerChanges = items
 		} else {
-			s.logger.Errorw("Sync: get items since failed",
+			s.logger.Errorw("Sync: get server changes failed",
 				"user_id", userID,
 				"since", req.LastSyncAt.UTC().Format(time.RFC3339),
-				"error", err,
-			)
-		}
-	}
-
-	// Missing items: те, которых нет у клиента. Рассчитываем множество client IDs из req.Changes.
-	if req.WantMissing {
-		clientSet := make(map[string]struct{}, len(req.Changes))
-		for _, ch := range req.Changes {
-			if ch.ID != "" {
-				clientSet[ch.ID] = struct{}{}
-			}
-		}
-		items, err := s.repo.ListAll(ctx, userID)
-		if err == nil {
-			for i := range items {
-				it := items[i]
-				if _, ok := clientSet[it.ID]; !ok {
-					res.MissingItems = append(res.MissingItems, it)
-				}
-			}
-		} else {
-			s.logger.Errorw("Sync: list all items failed",
-				"user_id", userID,
 				"error", err,
 			)
 		}

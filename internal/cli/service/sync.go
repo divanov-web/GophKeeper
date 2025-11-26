@@ -21,7 +21,6 @@ type syncChange struct {
 	BlobID         *string `json:"blob_id,omitempty"`
 	Version        *int64  `json:"version,omitempty"`
 	Deleted        *bool   `json:"deleted,omitempty"`
-	Resolve        *string `json:"resolve,omitempty"`
 	LoginCipher    []byte  `json:"login_cipher,omitempty"`
 	LoginNonce     []byte  `json:"login_nonce,omitempty"`
 	PasswordCipher []byte  `json:"password_cipher,omitempty"`
@@ -33,9 +32,9 @@ type syncChange struct {
 }
 
 type syncRequest struct {
-	LastSyncAt  string       `json:"last_sync_at,omitempty"`
-	Changes     []syncChange `json:"changes"`
-	WantMissing bool         `json:"want_missing,omitempty"`
+	LastSyncAt string       `json:"last_sync_at,omitempty"`
+	Changes    []syncChange `json:"changes"`
+	Resolve    *string      `json:"resolve,omitempty"`
 }
 
 type appliedDTO struct {
@@ -54,7 +53,6 @@ type syncResponse struct {
 	Conflicts     []conflictDTO    `json:"conflicts"`
 	ServerChanges []map[string]any `json:"server_changes"`
 	ServerTime    string           `json:"server_time"`
-	MissingItems  []map[string]any `json:"missing_items"`
 }
 
 // SyncItemToServer отправляет один item на сервер через /api/items/sync.
@@ -80,10 +78,6 @@ func SyncItemToServer(cfg *config.Config, item model.Item, isNew bool, resolve *
 	} else {
 		v := item.Version
 		chg.Version = &v
-	}
-	if resolve != nil && (*resolve == "client" || *resolve == "server") {
-		r := *resolve
-		chg.Resolve = &r
 	}
 	if item.Name != "" {
 		n := item.Name
@@ -124,6 +118,9 @@ func SyncItemToServer(cfg *config.Config, item model.Item, isNew bool, resolve *
 	}
 
 	payload := syncRequest{Changes: []syncChange{chg}}
+	if resolve != nil && (*resolve == "client" || *resolve == "server") {
+		payload.Resolve = resolve
+	}
 	url := cfg.ServerURL + "/api/items/sync"
 	resp, body, err := api.PostJSON(url, payload, token)
 	if err != nil {
@@ -412,10 +409,6 @@ func RunSyncBatch(ctx context.Context, cfg *config.Config, r crepo.ItemRepositor
 		ch := syncChange{ID: it.ID}
 		v := it.Version
 		ch.Version = &v
-		if opts.Resolve != nil && (*opts.Resolve == "client" || *opts.Resolve == "server") {
-			rv := *opts.Resolve
-			ch.Resolve = &rv
-		}
 		if it.Name != "" {
 			n := it.Name
 			ch.Name = &n
@@ -459,8 +452,9 @@ func RunSyncBatch(ctx context.Context, cfg *config.Config, r crepo.ItemRepositor
 	if lastSyncAt != "" {
 		payload.LastSyncAt = lastSyncAt
 	}
-	// Запросим у сервера записи, которых нет у клиента, только при полной синхронизации
-	payload.WantMissing = opts.All
+	if opts.Resolve != nil && (*opts.Resolve == "client" || *opts.Resolve == "server") {
+		payload.Resolve = opts.Resolve
+	}
 	url := cfg.ServerURL + "/api/items/sync"
 	resp, body, err := api.PostJSON(url, payload, token)
 	if err != nil {
@@ -561,6 +555,7 @@ func RunSyncBatch(ctx context.Context, cfg *config.Config, r crepo.ItemRepositor
 				if sid != "" {
 					_ = r.UpsertFullFromServer(itm)
 					_ = r.SetServerVersion(itm.ID, itm.Version)
+					res.ServerUpserts++
 					if blobID != "" {
 						if _, e := r.GetBlobByID(blobID); e != nil {
 							pending[blobID] = struct{}{}
@@ -581,15 +576,14 @@ func RunSyncBatch(ctx context.Context, cfg *config.Config, r crepo.ItemRepositor
 		}
 	}
 
-	// По ТЗ: server_changes с неполными данными НЕ сохраняем локально.
-
-	// Обработка missing_items (полные снимки записей, отсутствующих у клиента)
-	if len(sr.MissingItems) > 0 {
+	// Применим server_changes локально
+	if len(sr.ServerChanges) > 0 {
 		pending := map[string]struct{}{}
-		for _, sit := range sr.MissingItems {
+		for _, sit := range sr.ServerChanges {
 			sid, _ := sit["id"].(string)
 			sname, _ := sit["name"].(string)
 			sfile, _ := sit["file_name"].(string)
+			// версия
 			var sver int64
 			if v, ok := sit["version"]; ok {
 				switch vv := v.(type) {
@@ -622,7 +616,7 @@ func RunSyncBatch(ctx context.Context, cfg *config.Config, r crepo.ItemRepositor
 					}
 				}
 			}
-			// helper для []byte
+			//[]byte из base64 строки
 			toBytes := func(m map[string]any, key string) []byte {
 				if val, ok := m[key]; ok && val != nil {
 					switch vv := val.(type) {
@@ -665,7 +659,6 @@ func RunSyncBatch(ctx context.Context, cfg *config.Config, r crepo.ItemRepositor
 						pending[blobID] = struct{}{}
 					}
 				}
-				res.ServerUpserts++
 			}
 		}
 		if len(pending) > 0 {
