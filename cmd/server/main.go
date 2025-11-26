@@ -8,7 +8,6 @@ import (
 	"GophKeeper/internal/service"
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -50,8 +49,6 @@ func main() {
 	itemRepo := repo.NewItemRepository(gormDB)
 	blobRepo := repo.NewBlobRepository(gormDB)
 	itemService := service.NewItemService(itemRepo, blobRepo, sugar)
-
-	fmt.Println(userService.TestData())
 
 	h := handlers.NewHandler(userService, itemService, sugar, cfg)
 

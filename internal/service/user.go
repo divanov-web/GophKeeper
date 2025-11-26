@@ -53,8 +53,3 @@ func (s *UserService) Login(ctx context.Context, login, password string) (*model
 
 	return user, nil
 }
-
-// TestData тестовый ответ сервиса
-func (s *UserService) TestData() (string, error) {
-	return "test", nil
-}

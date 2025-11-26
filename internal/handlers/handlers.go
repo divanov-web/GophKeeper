@@ -22,6 +22,8 @@ func NewHandler(
 ) *Handler {
 	r := chi.NewRouter()
 
+	middleware.SetLogger(logger)
+
 	r.Use(middleware.WithGzip)
 	r.Use(middleware.WithLogging)
 	r.Use(middleware.WithAuth(config.AuthSecret))
