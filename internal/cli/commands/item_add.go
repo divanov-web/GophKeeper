@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 
 	"GophKeeper/internal/cli/bootstrap"
@@ -16,7 +17,7 @@ func (itemAddCmd) Description() string {
 }
 func (itemAddCmd) Usage() string { return "item-add <name> [<login> [<password>]]" }
 
-func (itemAddCmd) Run(cfg *config.Config, args []string) error { // cfg зарезервирован на будущее
+func (itemAddCmd) Run(ctx context.Context, cfg *config.Config, args []string) error { // cfg зарезервирован на будущее
 	if len(args) < 1 || len(args) > 2 && len(args) != 3 {
 		return ErrUsage
 	}

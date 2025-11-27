@@ -2,6 +2,7 @@ package commands
 
 import (
 	"GophKeeper/internal/config"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,7 +24,7 @@ func (registerCmd) Name() string        { return "register" }
 func (registerCmd) Description() string { return "Register a new user" }
 func (registerCmd) Usage() string       { return "register <login> <password>" }
 
-func (registerCmd) Run(cfg *config.Config, args []string) error {
+func (registerCmd) Run(ctx context.Context, cfg *config.Config, args []string) error {
 	if len(args) < 2 {
 		return ErrUsage
 	}

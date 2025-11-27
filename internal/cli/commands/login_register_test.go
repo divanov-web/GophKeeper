@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -29,7 +30,7 @@ func TestLogin_Run_SuccessAndErrors(t *testing.T) {
 
 	cfg := &config.Config{ServerURL: ts.URL}
 	cmd := loginCmd{}
-	if err := cmd.Run(cfg, []string{"alice", "secret"}); err != nil {
+	if err := cmd.Run(context.Background(), cfg, []string{"alice", "secret"}); err != nil {
 		t.Fatalf("login should succeed: %v", err)
 	}
 	// проверим, что токен и логин сохранены
@@ -57,12 +58,12 @@ func TestLogin_Run_SuccessAndErrors(t *testing.T) {
 	}))
 	defer ts401.Close()
 	cfg401 := &config.Config{ServerURL: ts401.URL}
-	if err := cmd.Run(cfg401, []string{"alice", "bad"}); err == nil {
+	if err := cmd.Run(context.Background(), cfg401, []string{"alice", "bad"}); err == nil {
 		t.Fatalf("expected error for 401")
 	}
 
 	// недостаточно аргументов → ErrUsage
-	if err := cmd.Run(cfg, []string{"onlyLogin"}); err == nil {
+	if err := cmd.Run(context.Background(), cfg, []string{"onlyLogin"}); err == nil {
 		t.Fatalf("expected ErrUsage for too few args")
 	} else if err != ErrUsage {
 		t.Fatalf("expected ErrUsage, got %v", err)
@@ -74,7 +75,7 @@ func TestLogin_Run_SuccessAndErrors(t *testing.T) {
 	}))
 	defer ts500.Close()
 	cfg500 := &config.Config{ServerURL: ts500.URL}
-	if err := cmd.Run(cfg500, []string{"a", "b"}); err == nil {
+	if err := cmd.Run(context.Background(), cfg500, []string{"a", "b"}); err == nil {
 		t.Fatalf("expected error for 500")
 	}
 }
@@ -95,7 +96,7 @@ func TestRegister_Run_SuccessAndErrors(t *testing.T) {
 
 	cfg := &config.Config{ServerURL: ts.URL}
 	cmd := registerCmd{}
-	if err := cmd.Run(cfg, []string{"bob", "pwd"}); err != nil {
+	if err := cmd.Run(context.Background(), cfg, []string{"bob", "pwd"}); err != nil {
 		t.Fatalf("register should succeed: %v", err)
 	}
 	// файл логина должен существовать
@@ -110,12 +111,12 @@ func TestRegister_Run_SuccessAndErrors(t *testing.T) {
 	}))
 	defer ts409.Close()
 	cfg409 := &config.Config{ServerURL: ts409.URL}
-	if err := cmd.Run(cfg409, []string{"bob", "pwd"}); err == nil {
+	if err := cmd.Run(context.Background(), cfg409, []string{"bob", "pwd"}); err == nil {
 		t.Fatalf("expected conflict error")
 	}
 
 	// недостаточно аргументов → ErrUsage
-	if err := cmd.Run(cfg, []string{"onlyLogin"}); err == nil {
+	if err := cmd.Run(context.Background(), cfg, []string{"onlyLogin"}); err == nil {
 		t.Fatalf("expected ErrUsage on short args")
 	} else if err != ErrUsage {
 		t.Fatalf("expected ErrUsage, got %v", err)
@@ -127,7 +128,7 @@ func TestRegister_Run_SuccessAndErrors(t *testing.T) {
 	}))
 	defer ts500.Close()
 	cfg500 := &config.Config{ServerURL: ts500.URL}
-	if err := cmd.Run(cfg500, []string{"bob", "pwd"}); err == nil {
+	if err := cmd.Run(context.Background(), cfg500, []string{"bob", "pwd"}); err == nil {
 		t.Fatalf("expected server error")
 	}
 

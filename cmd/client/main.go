@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"GophKeeper/internal/cli/commands"
 	"GophKeeper/internal/config"
@@ -23,8 +26,11 @@ func main() {
 		return
 	}
 
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	// dispatcher
-	exitCode := commands.Dispatch(cfg, flag.Args())
+	exitCode := commands.Dispatch(ctx, cfg, flag.Args())
 	if exitCode == 0 {
 		return
 	}

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"GophKeeper/internal/config"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -22,7 +23,7 @@ type Command interface {
 	// Usage returns the exact usage string, e.g. "login <login> <password>".
 	Usage() string
 	// Run executes the command with provided args (without the command name).
-	Run(cfg *config.Config, args []string) error
+	Run(ctx context.Context, cfg *config.Config, args []string) error
 }
 
 // registry holds available commands by name.

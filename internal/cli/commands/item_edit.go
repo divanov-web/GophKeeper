@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -23,7 +24,7 @@ func (itemEditCmd) Usage() string {
 	return "item-edit [--resolve=client|server] <name> <type> <value> [<value2> <value3> <value4>]"
 }
 
-func (itemEditCmd) Run(cfg *config.Config, args []string) error { // cfg зарезервирован на будущее
+func (itemEditCmd) Run(ctx context.Context, cfg *config.Config, args []string) error { // cfg зарезервирован на будущее
 	// Парсим флагами: разрешаем только префиксные флаги перед позиционными аргументами
 	fs := flag.NewFlagSet("item-edit", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)

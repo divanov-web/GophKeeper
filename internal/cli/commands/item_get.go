@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 
 	"GophKeeper/internal/cli/bootstrap"
@@ -16,7 +17,7 @@ func (itemGetCmd) Description() string {
 }
 func (itemGetCmd) Usage() string { return "item-get <name>" }
 
-func (itemGetCmd) Run(cfg *config.Config, args []string) error {
+func (itemGetCmd) Run(ctx context.Context, cfg *config.Config, args []string) error {
 	if len(args) != 1 {
 		return ErrUsage
 	}

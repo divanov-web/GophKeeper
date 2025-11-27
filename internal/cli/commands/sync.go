@@ -24,7 +24,7 @@ func (syncCmd) Usage() string {
 	return "sync [--all] [--resolve=client|server]"
 }
 
-func (syncCmd) Run(cfg *config.Config, args []string) error {
+func (syncCmd) Run(ctx context.Context, cfg *config.Config, args []string) error {
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	all := fs.Bool("all", false, "полная синхронизация с начала времён")
@@ -48,7 +48,7 @@ func (syncCmd) Run(cfg *config.Config, args []string) error {
 
 	fmt.Fprintln(Out, "→ Запуск синхронизации всей базы…")
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Канал для результата

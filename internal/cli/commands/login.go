@@ -2,6 +2,7 @@ package commands
 
 import (
 	"GophKeeper/internal/config"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,7 +24,7 @@ func (loginCmd) Name() string        { return "login" }
 func (loginCmd) Description() string { return "Login and store auth cookie" }
 func (loginCmd) Usage() string       { return "login <login> <password>" }
 
-func (loginCmd) Run(cfg *config.Config, args []string) error {
+func (loginCmd) Run(ctx context.Context, cfg *config.Config, args []string) error {
 	if len(args) < 2 {
 		return ErrUsage
 	}

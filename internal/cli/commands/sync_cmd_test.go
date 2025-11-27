@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -66,7 +67,7 @@ func TestSync_Run_Applied_PrintSummary(t *testing.T) {
 	Out = &buf
 	defer func() { Out = old }()
 
-	err := (syncCmd{}).Run(cfg, []string{})
+	err := (syncCmd{}).Run(context.Background(), cfg, []string{})
 	if err != nil {
 		t.Fatalf("run returned error: %v", err)
 	}
@@ -117,7 +118,7 @@ func TestSync_Run_Conflicts_Interactive_ClientThenApplied(t *testing.T) {
 	Out = &buf
 	defer func() { Out = old }()
 
-	if err := (syncCmd{}).Run(cfg, []string{}); err != nil {
+	if err := (syncCmd{}).Run(context.Background(), cfg, []string{}); err != nil {
 		t.Fatalf("run err: %v", err)
 	}
 	out := buf.String()
@@ -166,7 +167,7 @@ func TestSync_Run_Conflicts_Interactive_ServerThenSummary(t *testing.T) {
 	Out = &buf
 	defer func() { Out = old }()
 
-	if err := (syncCmd{}).Run(cfg, []string{}); err != nil {
+	if err := (syncCmd{}).Run(context.Background(), cfg, []string{}); err != nil {
 		t.Fatalf("run err: %v", err)
 	}
 	out := buf.String()
@@ -196,7 +197,7 @@ func TestSync_Run_Conflicts_Interactive_Cancel(t *testing.T) {
 	Out = &buf
 	defer func() { Out = old }()
 
-	if err := (syncCmd{}).Run(cfg, []string{}); err != nil {
+	if err := (syncCmd{}).Run(context.Background(), cfg, []string{}); err != nil {
 		t.Fatalf("run err: %v", err)
 	}
 	out := buf.String()
@@ -235,7 +236,7 @@ func TestSync_Run_AllAndResolveClient_Flags(t *testing.T) {
 	Out = &buf
 	defer func() { Out = old }()
 
-	if err := (syncCmd{}).Run(cfg, []string{"--all", "--resolve=client"}); err != nil {
+	if err := (syncCmd{}).Run(context.Background(), cfg, []string{"--all", "--resolve=client"}); err != nil {
 		t.Fatalf("run err: %v", err)
 	}
 	out := buf.String()
@@ -257,7 +258,7 @@ func TestSync_Run_ServerErrorPrinted(t *testing.T) {
 	Out = &buf
 	defer func() { Out = old }()
 
-	if err := (syncCmd{}).Run(cfg, []string{}); err != nil {
+	if err := (syncCmd{}).Run(context.Background(), cfg, []string{}); err != nil {
 		t.Fatalf("run err: %v", err)
 	}
 	if !strings.Contains(buf.String(), "Ошибка синхронизации") {
@@ -267,7 +268,7 @@ func TestSync_Run_ServerErrorPrinted(t *testing.T) {
 
 func TestSync_Run_UsageErrors(t *testing.T) {
 	// неверное значение resolve
-	if err := (syncCmd{}).Run(&config.Config{}, []string{"--resolve=bad"}); err != ErrUsage {
+	if err := (syncCmd{}).Run(context.Background(), &config.Config{}, []string{"--resolve=bad"}); err != ErrUsage {
 		t.Fatalf("expected ErrUsage, got %v", err)
 	}
 }

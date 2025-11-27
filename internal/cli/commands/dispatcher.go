@@ -2,6 +2,7 @@ package commands
 
 import (
 	"GophKeeper/internal/config"
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -10,7 +11,7 @@ import (
 
 // Dispatch is the single entry point to execute CLI commands.
 // It prints help and usage messages and returns a process exit code.
-func Dispatch(cfg *config.Config, args []string) int {
+func Dispatch(ctx context.Context, cfg *config.Config, args []string) int {
 	// If user passed global --help after flags parsing, show global usage
 	for _, a := range os.Args[1:] {
 		if a == "--help" || a == "-h" {
@@ -50,7 +51,7 @@ func Dispatch(cfg *config.Config, args []string) int {
 		return 2
 	}
 
-	err := c.Run(cfg, args[1:])
+	err := c.Run(ctx, cfg, args[1:])
 	switch err {
 	case nil:
 		return 0
